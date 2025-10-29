@@ -1,14 +1,62 @@
+# Navigator House - Агенство недвижимости в Бишкеке
+# https://nhouse.kg
+
+# Правила для всех роботов
+User-agent: *
+Allow: /
+Allow: /properties
+Allow: /properties/*
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /login
+Disallow: /my-properties
+Disallow: /audit
+Disallow: /reference-data
+Disallow: /trash
+Disallow: /viewings
+Disallow: /favorites
+Disallow: /profile
+Disallow: /new-buildings
+Disallow: /docs
+
+# Разрешить поисковым ботам индексировать публичные страницы
 User-agent: Googlebot
 Allow: /
+Allow: /properties
+Allow: /properties/*/public
+Disallow: /admin
+Disallow: /dashboard
 
 User-agent: Bingbot
 Allow: /
+Allow: /properties
+Allow: /properties/*/public
+Disallow: /admin
+Disallow: /dashboard
 
+# Разрешить социальным ботам
 User-agent: Twitterbot
 Allow: /
+Allow: /properties/*/public
 
 User-agent: facebookexternalhit
 Allow: /
+Allow: /properties/*/public
 
-User-agent: *
+User-agent: WhatsApp
 Allow: /
+Allow: /properties/*/public
+
+# Yandex
+User-agent: Yandex
+Allow: /
+Allow: /properties
+Allow: /properties/*/public
+Disallow: /admin
+Disallow: /dashboard
+
+# Время между запросами (в секундах)
+Crawl-delay: 1
+
+# Sitemap
+Sitemap: https://nhouse.kg/sitemap.xml

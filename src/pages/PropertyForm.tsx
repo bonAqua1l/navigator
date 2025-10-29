@@ -366,7 +366,29 @@ export default function PropertyForm() {
 
       if (isEditMode && propertyId) {
         // Обновление существующего объявления
-        const { error: updateError } = await supabase.from("properties").update(propertyData).eq("id", propertyId);
+        // Получаем текущие данные для проверки property_number
+        const { data: currentProperty } = await supabase
+          .from("properties")
+          .select("property_number")
+          .eq("id", propertyId)
+          .single();
+
+        // Проверяем, есть ли уже ID в описании
+        const propertyNumber = currentProperty?.property_number;
+        let finalDescription = propertyData.description || "";
+
+        if (propertyNumber && finalDescription && !finalDescription.includes(`ID: ${propertyNumber}`)) {
+          // Если ID нет в описании, добавляем его
+          finalDescription = `${finalDescription}\n\nID: ${propertyNumber}`;
+        } else if (propertyNumber && !finalDescription) {
+          // Если описание пустое, добавляем только ID
+          finalDescription = `ID: ${propertyNumber}`;
+        }
+
+        const { error: updateError } = await supabase
+          .from("properties")
+          .update({ ...propertyData, description: finalDescription })
+          .eq("id", propertyId);
 
         if (updateError) throw updateError;
         propertyIdToUse = propertyId;
@@ -393,6 +415,18 @@ export default function PropertyForm() {
         if (propertyError) throw propertyError;
         if (!property) throw new Error("Property not created");
         propertyIdToUse = property.id;
+
+        // Автоматически добавляем ID объявления в конец описания
+        if (property.property_number) {
+          const updatedDescription = formData.description
+            ? `${formData.description}\n\nID: ${property.property_number}`
+            : `ID: ${property.property_number}`;
+
+          await supabase
+            .from("properties")
+            .update({ description: updatedDescription })
+            .eq("id", propertyIdToUse);
+        }
       }
 
       // Добавление связей для множественных выборов

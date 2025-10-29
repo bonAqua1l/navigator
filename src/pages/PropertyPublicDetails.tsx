@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, MapPin, Home, Maximize, Phone, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ArrowLeft, MapPin, Home, Maximize, Phone, ChevronLeft, ChevronRight, X, MessageCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { formatPrice } from "@/lib/priceUtils";
 import navigatorLogo from "@/assets/navigator-house-logo.png";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ const PropertyPublicDetails = () => {
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [manager, setManager] = useState<any>(null);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -126,9 +127,20 @@ const PropertyPublicDetails = () => {
   };
 
   const handleContactRequest = () => {
-    const message = `Хочу узнать подробнее об этом объекте: ${window.location.href}`;
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=996503090699?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, "_blank");
+    setContactDialogOpen(true);
+  };
+
+  const whatsappNumbers = [
+    "+996 506 990 199",
+    "+996 506 991 099",
+    "+996 506 990 599",
+    "+996 506 990 799"
+  ];
+
+  const createWhatsAppLink = (phone: string) => {
+    const cleanPhone = phone.replace(/\s/g, "").replace("+", "");
+    const message = `Здравствуйте! Хочу узнать подробнее об этом объявлении:\n\nОбъект №${property?.property_number}\nСсылка: ${window.location.href}`;
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   };
 
   const openFullscreen = (index: number) => {
@@ -454,6 +466,46 @@ const PropertyPublicDetails = () => {
                 )}
               </>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp Contact Dialog */}
+      <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-green-600" />
+              Связаться с нами в WhatsApp
+            </DialogTitle>
+            <DialogDescription>
+              Выберите удобный номер для связи. Сообщение будет автоматически заполнено информацией об объекте.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {whatsappNumbers.map((phone, index) => {
+              const whatsappLink = createWhatsAppLink(phone);
+              return (
+                <a
+                  key={index}
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setContactDialogOpen(false)}
+                  className="flex items-center gap-3 p-3 bg-card border-2 border-border hover:border-green-500/50 rounded-lg transition-all group cursor-pointer"
+                >
+                  <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-green-500/20 transition-colors">
+                    <Phone className="h-5 w-5 text-green-600" />
+                  </div>
+                  <span className="text-base font-medium text-foreground">{phone}</span>
+                </a>
+              );
+            })}
+          </div>
+          <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+            <p>✓ Нажав на номер, вы перейдете в WhatsApp</p>
+            <p>✓ Сообщение будет автоматически заполнено</p>
+            <p>✓ Просто отправьте его для начала диалога</p>
           </div>
         </DialogContent>
       </Dialog>

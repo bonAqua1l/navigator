@@ -633,7 +633,7 @@ const Landing = () => {
                 viewport={{ once: true }}
                 className="space-y-3"
               >
-                {["+996 506 990 199", "+996 506 991 099", "+996 506 990 599", "+996 506 880 799"].map(
+                {["+996 506 990 199", "+996 506 991 099", "+996 506 990 599", "+996 506 990 799"].map(
                   (phone, index) => {
                     const cleanPhone = phone.replace(/\s/g, "");
                     const whatsappLink = `https://wa.me/${cleanPhone.replace("+", "")}`;

@@ -210,63 +210,66 @@ export function FeaturedPropertiesManager() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-primary" />
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Star className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             Избранные объявления на главной странице
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-6">
           {featured.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
+            <p className="text-muted-foreground text-center py-8 text-sm">
               Нет избранных объявлений
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 sm:space-y-3">
               {featured.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                 >
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="secondary" className="shrink-0 w-fit text-xs">
                     #{item.display_order}
                   </Badge>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium">
+                    <div className="font-medium text-sm sm:text-base">
                       Объект №{item.properties.property_number}
                     </div>
-                    <div className="text-sm text-muted-foreground truncate">
+                    <div className="text-xs sm:text-sm text-muted-foreground truncate">
                       {item.properties.address}
                     </div>
-                    <div className="text-sm font-semibold text-primary">
+                    <div className="text-xs sm:text-sm font-semibold text-primary">
                       {item.properties.price.toLocaleString("ru-RU")}{" "}
                       {item.properties.currency}
                     </div>
                   </div>
-                  <Select
-                    value={item.display_order.toString()}
-                    onValueChange={(value) => updateOrder(item.id, parseInt(value))}
-                  >
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5].map((order) => (
-                        <SelectItem key={order} value={order.toString()}>
-                          {order}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeFeatured(item.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={item.display_order.toString()}
+                      onValueChange={(value) => updateOrder(item.id, parseInt(value))}
+                    >
+                      <SelectTrigger className="w-20 sm:w-24 text-xs sm:text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5].map((order) => (
+                          <SelectItem key={order} value={order.toString()}>
+                            {order}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeFeatured(item.id)}
+                      className="h-8 w-8 sm:h-10 sm:w-10"
+                    >
+                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -276,38 +279,38 @@ export function FeaturedPropertiesManager() {
 
       {featured.length < 5 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Добавить объявление</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-base sm:text-lg">Добавить объявление</CardTitle>
             <div className="relative mt-4">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Поиск по номеру или адресу..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 text-sm"
               />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-6">
             {filteredProperties.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">
+              <p className="text-muted-foreground text-center py-8 text-sm">
                 Нет доступных объявлений
               </p>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 sm:space-y-3 max-h-96 overflow-y-auto">
                 {filteredProperties.map((property) => (
                   <div
                     key={property.id}
-                    className="flex items-center gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium">
+                      <div className="font-medium text-sm sm:text-base">
                         Объект №{property.property_number}
                       </div>
-                      <div className="text-sm text-muted-foreground truncate">
+                      <div className="text-xs sm:text-sm text-muted-foreground truncate">
                         {property.address}
                       </div>
-                      <div className="text-sm font-semibold text-primary">
+                      <div className="text-xs sm:text-sm font-semibold text-primary">
                         {property.price.toLocaleString("ru-RU")} {property.currency}
                       </div>
                     </div>
@@ -317,7 +320,7 @@ export function FeaturedPropertiesManager() {
                           addFeatured(property.id, parseInt(value))
                         }
                       >
-                        <SelectTrigger className="w-32">
+                        <SelectTrigger className="w-full sm:w-32 text-xs sm:text-sm">
                           <SelectValue placeholder="Позиция" />
                         </SelectTrigger>
                         <SelectContent>
@@ -329,7 +332,7 @@ export function FeaturedPropertiesManager() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Badge variant="secondary">Нет мест</Badge>
+                      <Badge variant="secondary" className="text-xs w-fit">Нет мест</Badge>
                     )}
                   </div>
                 ))}

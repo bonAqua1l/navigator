@@ -12,6 +12,10 @@ interface NavItem {
   roles: string[];
 }
 
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
 const navItems: NavItem[] = [
   {
     title: 'Дежурка',
@@ -75,7 +79,7 @@ const navItems: NavItem[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const location = useLocation();
   const { profile, userRoles, signOut } = useAuth();
 
@@ -83,11 +87,17 @@ export function Sidebar() {
     userRoles.length > 0 ? item.roles.some(role => userRoles.includes(role)) : false
   );
 
+  const handleNavClick = () => {
+    if (onNavigate) {
+      onNavigate();
+    }
+  };
+
   return (
-    <aside className="w-64 min-h-screen bg-primary flex flex-col">
+    <aside className="w-64 h-full lg:min-h-screen bg-primary flex flex-col overflow-y-auto">
       {/* Logo */}
       <div className="p-6 border-b border-primary-hover">
-        <Link to="/dashboard" className="flex items-center gap-3">
+        <Link to="/dashboard" className="flex items-center gap-3" onClick={handleNavClick}>
           <img src={navigatorLogo} alt="Navigator House" className="h-12 w-auto" />
           <div>
             <h1 className="text-xl font-bold text-primary-foreground">Navigator House</h1>
@@ -106,6 +116,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               to={item.href}
+              onClick={handleNavClick}
               className={cn(
                 'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200',
                 isActive
@@ -124,6 +135,7 @@ export function Sidebar() {
       <div className="p-4 border-t border-primary-hover space-y-2">
         <Link
           to="/profile"
+          onClick={handleNavClick}
           className="flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-200"
         >
           <Settings className="h-5 w-5" />
@@ -131,7 +143,10 @@ export function Sidebar() {
         </Link>
         
         <Button
-          onClick={signOut}
+          onClick={() => {
+            handleNavClick();
+            signOut();
+          }}
           variant="ghost"
           className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >
