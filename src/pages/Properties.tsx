@@ -16,6 +16,7 @@ import { useInView } from "react-intersection-observer";
 interface Property {
   id: string;
   property_number: number;
+  description: string | null;
   price: number;
   currency: string;
   exchange_rate: number | null;
@@ -98,6 +99,7 @@ const Properties = () => {
         .select(`
           id,
           property_number,
+          description,
           price,
           currency,
           exchange_rate,
@@ -126,7 +128,34 @@ const Properties = () => {
       setLoading(false);
     }
   };
+  const truncateDescription = (text: string | null, maxLength: number = 100): string => {
+    if (!text) return "";
 
+    // Убираем лишние пробелы и переносы строк
+    const cleanText = text.trim().replace(/\s+/g, " ");
+
+    if (cleanText.length <= maxLength) {
+      return cleanText;
+    }
+
+    // Обрезаем до maxLength и ищем последнее предложение
+    const truncated = cleanText.substring(0, maxLength);
+    const lastPeriod = truncated.lastIndexOf(".");
+    const lastExclamation = truncated.lastIndexOf("!");
+    const lastQuestion = truncated.lastIndexOf("?");
+
+    // Находим последний знак препинания
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion);
+
+    if (lastSentenceEnd > 0 && lastSentenceEnd > maxLength * 0.5) {
+      // Если нашли знак препинания и он не слишком близко к началу
+      return truncated.substring(0, lastSentenceEnd + 1);
+    }
+
+    // Иначе обрезаем по последнему пробелу
+    const lastSpace = truncated.lastIndexOf(" ");
+    return lastSpace > 0 ? truncated.substring(0, lastSpace) + "..." : truncated + "...";
+  };
   const filteredProperties = properties.filter((property) => {
     const matchesSearch =
       searchTerm === "" ||
@@ -473,12 +502,11 @@ const Properties = () => {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {/* <div className="flex items-center gap-2 text-muted-foreground">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-sm">
-                          {property.property_areas?.name || "Район не указан"}
-                        </span>
-                      </div> */}
+                    {property.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+                      {truncateDescription(property.description, 120)}
+                    </p>
+                  )}
                       {property.property_size && (
                         <p className="text-sm text-muted-foreground">
                           Площадь: {property.property_size} м²
