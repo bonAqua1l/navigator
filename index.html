@@ -56,16 +56,23 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "RealEstateAgent",
+      "@type": "Organization",
       "name": "Navigator House",
-      "description": "Профессиональное агенство недвижимости в Бишкеке",
+      "alternateName": "Навигатор Хаус",
+      "description": "Профессиональное агентство недвижимости в Бишкеке",
       "url": "https://nhouse.kg",
-      "logo": "https://nhouse.kg/navigator-house-logo.png",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://nhouse.kg/navigator-house-logo.png",
+        "width": "512",
+        "height": "512"
+      },
       "image": "https://nhouse.kg/og-image.png",
       "telephone": "+996506990199",
-      "priceRange": "$$",
+      "email": "info@nhouse.kg",
       "address": {
         "@type": "PostalAddress",
+        "streetAddress": "2 улица Молдокулова",
         "addressLocality": "Бишкек",
         "addressCountry": "KG"
       },
@@ -75,20 +82,57 @@
         "longitude": "74.5698"
       },
       "sameAs": [
-        "https://wa.me/996506990199",
-        "https://wa.me/996506991099",
-        "https://wa.me/996506990599",
-        "https://wa.me/996506990799"
+        "https://www.instagram.com/navigatorhouse",
+        "https://wa.me/996506990199"
       ],
-      "areaServed": {
-        "@type": "City",
-        "name": "Бишкек"
-      },
       "contactPoint": {
         "@type": "ContactPoint",
         "telephone": "+996506990199",
         "contactType": "customer service",
+        "areaServed": "KG",
         "availableLanguage": ["Russian", "Kyrgyz"]
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "RealEstateAgent",
+      "name": "Navigator House",
+      "description": "Профессиональное агентство недвижимости в Бишкеке. Продажа и аренда квартир, домов, коммерческой недвижимости",
+      "url": "https://nhouse.kg",
+      "logo": "https://nhouse.kg/navigator-house-logo.png",
+      "image": "https://nhouse.kg/og-image.png",
+      "telephone": "+996506990199",
+      "priceRange": "$$",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "2 улица Молдокулова",
+        "addressLocality": "Бишкек",
+        "addressCountry": "KG"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": "42.8746",
+        "longitude": "74.5698"
+      },
+      "areaServed": {
+        "@type": "City",
+        "name": "Бишкек"
+      },
+      "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ],
+        "opens": "09:00",
+        "closes": "21:00"
       }
     }
     </script>

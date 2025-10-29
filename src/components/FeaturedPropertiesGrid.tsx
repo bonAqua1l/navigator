@@ -11,6 +11,7 @@ interface Property {
   price: number;
   currency: string;
   address: string;
+  description: string | null;
   property_rooms: string | null;
   property_size: number | null;
   property_category_id: string | null;
@@ -30,6 +31,36 @@ export function FeaturedPropertiesGrid() {
   const [featured, setFeatured] = useState<FeaturedProperty[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // Функция для обрезки описания
+  const truncateDescription = (text: string | null, maxLength: number = 100): string => {
+    if (!text) return "";
+
+    // Убираем лишние пробелы и переносы строк
+    const cleanText = text.trim().replace(/\s+/g, " ");
+
+    if (cleanText.length <= maxLength) {
+      return cleanText;
+    }
+
+    // Обрезаем до maxLength и ищем последнее предложение
+    const truncated = cleanText.substring(0, maxLength);
+    const lastPeriod = truncated.lastIndexOf(".");
+    const lastExclamation = truncated.lastIndexOf("!");
+    const lastQuestion = truncated.lastIndexOf("?");
+
+    // Находим последний знак препинания
+    const lastSentenceEnd = Math.max(lastPeriod, lastExclamation, lastQuestion);
+
+    if (lastSentenceEnd > 0 && lastSentenceEnd > maxLength * 0.5) {
+      // Если нашли знак препинания и он не слишком близко к началу
+      return truncated.substring(0, lastSentenceEnd + 1);
+    }
+
+    // Иначе обрезаем по последнему пробелу
+    const lastSpace = truncated.lastIndexOf(" ");
+    return lastSpace > 0 ? truncated.substring(0, lastSpace) + "..." : truncated + "...";
+  };
   useEffect(() => {
     fetchFeaturedProperties();
   }, []);
@@ -48,6 +79,7 @@ export function FeaturedPropertiesGrid() {
             price,
             currency,
             address,
+            description,
             property_rooms,
             property_size,
             property_category_id,
@@ -142,10 +174,11 @@ export function FeaturedPropertiesGrid() {
                     <span className="text-sm text-muted-foreground">{property.currency}</span>
                   </div>
 
-                  <div className="flex items-start gap-2 text-muted-foreground min-h-[40px]">
-                    <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm line-clamp-2">{property.address}</p>
-                  </div>
+                  {property.description && (
+                    <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+                      {truncateDescription(property.description, 120)}
+                    </p>
+                  )}
 
                   <div className="flex gap-4 pt-2 border-t border-border">
                     {property.property_rooms && <div className="flex items-center gap-1.5 text-sm">

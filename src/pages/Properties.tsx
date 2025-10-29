@@ -473,12 +473,12 @@ const Properties = () => {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="flex items-center gap-2 text-muted-foreground">
+                      {/* <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4" />
                         <span className="text-sm">
                           {property.property_areas?.name || "Район не указан"}
                         </span>
-                      </div>
+                      </div> */}
                       {property.property_size && (
                         <p className="text-sm text-muted-foreground">
                           Площадь: {property.property_size} м²
