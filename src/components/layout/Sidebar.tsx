@@ -97,7 +97,7 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
     <aside className="w-64 h-full lg:min-h-screen bg-primary flex flex-col overflow-y-auto">
       {/* Logo */}
       <div className="p-6 border-b border-primary-hover">
-        <Link to="/dashboard" className="flex items-center gap-3" onClick={handleNavClick}>
+        <Link to="/" className="flex items-center gap-3" onClick={handleNavClick}>
           <img src={navigatorLogo} alt="Navigator House" className="h-12 w-auto" />
           <div>
             <h1 className="text-xl font-bold text-primary-foreground">Navigator House</h1>
