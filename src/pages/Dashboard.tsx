@@ -3,15 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Property } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, TrendingUp, Calendar, Star, Filter } from 'lucide-react';
+import { Building2, TrendingUp, Calendar, Star, Filter, X, Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ROOM_OPTIONS } from '@/types/property';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import AssignViewingDialog from '@/components/AssignViewingDialog';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 
 interface PropertyWithPhotos extends Property {
   property_photos?: Array<{ photo_url: string; display_order: number }>;
@@ -25,6 +48,80 @@ interface PropertyWithPhotos extends Property {
   featured_order?: number;
 }
 
+const ITEMS_PER_PAGE = 12;
+
+interface MultiSelectProps {
+  options: Array<{ id: string; name: string }>;
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+}
+
+function MultiSelectCombobox({ options, selected, onChange, placeholder = "Выберите...", searchPlaceholder = "Поиск..." }: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+
+  const toggleOption = (optionId: string) => {
+    const newSelected = selected.includes(optionId)
+      ? selected.filter(id => id !== optionId)
+      : [...selected, optionId];
+    onChange(newSelected);
+  };
+
+  const getDisplayText = () => {
+    if (selected.length === 0) return placeholder;
+    if (selected.length === 1) {
+      const item = options.find(opt => opt.id === selected[0]);
+      return item?.name || placeholder;
+    }
+    return `Выбрано: ${selected.length}`;
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+        >
+          <span className="truncate">{getDisplayText()}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-full p-0" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>Ничего не найдено</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  onSelect={() => toggleOption(option.id)}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Checkbox
+                      checked={selected.includes(option.id)}
+                      className="pointer-events-none"
+                    />
+                    <span className="flex-1">{option.name}</span>
+                    {selected.includes(option.id) && (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [properties, setProperties] = useState<PropertyWithPhotos[]>([]);
@@ -34,21 +131,24 @@ export default function Dashboard() {
   const [viewingDialogOpen, setViewingDialogOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<{ id: string; number: number } | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  
-  const [actionFilter, setActionFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [subcategoryFilter, setSubcategoryFilter] = useState<string>("all");
-  const [areaFilter, setAreaFilter] = useState<string>("all");
-  const [roomsFilter, setRoomsFilter] = useState<string>("all");
-  const [conditionFilter, setConditionFilter] = useState<string>("all");
+
+  const [actionFilter, setActionFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [subcategoryFilter, setSubcategoryFilter] = useState<string[]>([]);
+  const [areaFilter, setAreaFilter] = useState<string[]>([]);
+  const [roomsFilter, setRoomsFilter] = useState<string[]>([]);
+  const [conditionFilter, setConditionFilter] = useState<string[]>([]);
+  const [managerFilter, setManagerFilter] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
-  
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [actionCategories, setActionCategories] = useState<any[]>([]);
   const [propertyCategories, setPropertyCategories] = useState<any[]>([]);
   const [propertySubcategories, setPropertySubcategories] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [conditions, setConditions] = useState<any[]>([]);
+  const [managers, setManagers] = useState<any[]>([]);
   
   const { user, profile, isAdmin } = useAuth();
   const { toast } = useToast();
@@ -63,19 +163,21 @@ export default function Dashboard() {
 
   const fetchFilters = async () => {
     try {
-      const [actionsRes, categoriesRes, subcategoriesRes, areasRes, conditionsRes] = await Promise.all([
+      const [actionsRes, categoriesRes, subcategoriesRes, areasRes, conditionsRes, managersRes] = await Promise.all([
         supabase.from("property_action_categories").select("*"),
         supabase.from("property_categories").select("*"),
         supabase.from("property_subcategories").select("*").order("name"),
         supabase.from("property_areas").select("*").order("name"),
-        supabase.from("property_conditions").select("*").order("name")
+        supabase.from("property_conditions").select("*").order("name"),
+        supabase.from("profiles").select("id, full_name").order("full_name")
       ]);
-      
+
       setActionCategories(actionsRes.data || []);
       setPropertyCategories(categoriesRes.data || []);
       setPropertySubcategories(subcategoriesRes.data || []);
       setAreas(areasRes.data || []);
       setConditions(conditionsRes.data || []);
+      setManagers((managersRes.data || []).map(m => ({ id: m.id, name: m.full_name })));
     } catch (error) {
       console.error("Error fetching filters:", error);
     }
@@ -279,32 +381,45 @@ export default function Dashboard() {
       property.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
       property.property_number.toString().includes(searchQuery) ||
       property.property_areas?.name.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesAction =
-      actionFilter === "all" || property.property_action_category_id === actionFilter;
-    
+      actionFilter.length === 0 || actionFilter.includes(property.property_action_category_id || '');
+
     const matchesCategory =
-      categoryFilter === "all" || property.property_category_id === categoryFilter;
-    
+      categoryFilter.length === 0 || categoryFilter.includes(property.property_category_id || '');
+
     const matchesSubcategory =
-      subcategoryFilter === "all" || property.property_subcategory_id === subcategoryFilter;
-    
+      subcategoryFilter.length === 0 || subcategoryFilter.includes(property.property_subcategory_id || '');
+
     const matchesArea =
-      areaFilter === "all" || property.property_area_id === areaFilter;
-    
+      areaFilter.length === 0 || areaFilter.includes(property.property_area_id || '');
+
     const matchesRooms =
-      roomsFilter === "all" || property.property_rooms === roomsFilter;
-    
+      roomsFilter.length === 0 || roomsFilter.includes(property.property_rooms || '');
+
     const matchesCondition =
-      conditionFilter === "all" || property.property_condition_id === conditionFilter;
-    
+      conditionFilter.length === 0 || conditionFilter.includes(property.property_condition_id || '');
+
+    const matchesManager =
+      managerFilter.length === 0 || managerFilter.includes(property.created_by || '');
+
     const minPriceNum = minPrice ? parseFloat(minPrice) : 0;
     const maxPriceNum = maxPrice ? parseFloat(maxPrice) : Infinity;
     const matchesPrice =
       property.price >= minPriceNum && property.price <= maxPriceNum;
 
-    return matchesSearch && matchesAction && matchesCategory && matchesSubcategory && matchesArea && matchesRooms && matchesCondition && matchesPrice;
+    return matchesSearch && matchesAction && matchesCategory && matchesSubcategory && matchesArea && matchesRooms && matchesCondition && matchesManager && matchesPrice;
   });
+
+  const totalPages = Math.ceil(filteredProperties.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedProperties = filteredProperties.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, managerFilter, minPrice, maxPrice]);
 
   const stats = [
     {
@@ -418,109 +533,85 @@ export default function Dashboard() {
               {/* Action Type */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Тип предложения</label>
-                <Select value={actionFilter} onValueChange={setActionFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {actionCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={actionCategories}
+                  selected={actionFilter}
+                  onChange={setActionFilter}
+                  placeholder="Все типы предложений"
+                  searchPlaceholder="Поиск типа предложения..."
+                />
               </div>
 
               {/* Property Category */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Тип недвижимости</label>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {propertyCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={propertyCategories}
+                  selected={categoryFilter}
+                  onChange={setCategoryFilter}
+                  placeholder="Все типы недвижимости"
+                  searchPlaceholder="Поиск типа недвижимости..."
+                />
               </div>
 
-              {/* Property Subcategory (Дежурка) */}
+              {/* Property Subcategory */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Подтип (Дежурка)</label>
-                <Select value={subcategoryFilter} onValueChange={setSubcategoryFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {propertySubcategories.map((subcat) => (
-                      <SelectItem key={subcat.id} value={subcat.id}>
-                        {subcat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={propertySubcategories}
+                  selected={subcategoryFilter}
+                  onChange={setSubcategoryFilter}
+                  placeholder="Все подтипы"
+                  searchPlaceholder="Поиск подтипа..."
+                />
               </div>
 
               {/* Rooms */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Количество комнат</label>
-                <Select value={roomsFilter} onValueChange={setRoomsFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {ROOM_OPTIONS.map((room) => (
-                      <SelectItem key={room.value} value={room.value}>
-                        {room.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={ROOM_OPTIONS.map(r => ({ id: r.value, name: r.label }))}
+                  selected={roomsFilter}
+                  onChange={setRoomsFilter}
+                  placeholder="Все варианты"
+                  searchPlaceholder="Поиск количества комнат..."
+                />
               </div>
 
               {/* Area */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Район</label>
-                <Select value={areaFilter} onValueChange={setAreaFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {areas.map((area) => (
-                      <SelectItem key={area.id} value={area.id}>
-                        {area.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={areas}
+                  selected={areaFilter}
+                  onChange={setAreaFilter}
+                  placeholder="Все районы"
+                  searchPlaceholder="Поиск района..."
+                />
               </div>
 
               {/* Condition */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Состояние</label>
-                <Select value={conditionFilter} onValueChange={setConditionFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Все" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все</SelectItem>
-                    {conditions.map((condition) => (
-                      <SelectItem key={condition.id} value={condition.id}>
-                        {condition.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <MultiSelectCombobox
+                  options={conditions}
+                  selected={conditionFilter}
+                  onChange={setConditionFilter}
+                  placeholder="Все состояния"
+                  searchPlaceholder="Поиск состояния..."
+                />
+              </div>
+
+              {/* Manager Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Менеджер</label>
+                <MultiSelectCombobox
+                  options={managers}
+                  selected={managerFilter}
+                  onChange={setManagerFilter}
+                  placeholder="Все менеджеры"
+                  searchPlaceholder="Поиск менеджера..."
+                />
               </div>
 
               {/* Min Price */}
@@ -547,17 +638,18 @@ export default function Dashboard() {
 
               {/* Reset Filters */}
               <div className="lg:col-span-3 flex justify-end">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => {
                     setSearchQuery("");
-                    setActionFilter("all");
-                    setCategoryFilter("all");
-                    setSubcategoryFilter("all");
-                    setAreaFilter("all");
-                    setRoomsFilter("all");
-                    setConditionFilter("all");
+                    setActionFilter([]);
+                    setCategoryFilter([]);
+                    setSubcategoryFilter([]);
+                    setAreaFilter([]);
+                    setRoomsFilter([]);
+                    setConditionFilter([]);
+                    setManagerFilter([]);
                     setMinPrice("");
                     setMaxPrice("");
                   }}
@@ -572,7 +664,7 @@ export default function Dashboard() {
 
       {/* Properties Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProperties.map((property) => (
+        {paginatedProperties.map((property) => (
           <Card key={property.id} className="overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer" onClick={() => navigate(`/properties/${property.id}`)}>
             <div className="aspect-video bg-muted relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
@@ -703,6 +795,55 @@ export default function Dashboard() {
             Попробуйте изменить параметры поиска
           </CardDescription>
         </Card>
+      )}
+
+      {/* Pagination */}
+      {filteredProperties.length > ITEMS_PER_PAGE && (
+        <div className="flex justify-center mt-8">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                if (
+                  page === 1 ||
+                  page === totalPages ||
+                  (page >= currentPage - 1 && page <= currentPage + 1)
+                ) {
+                  return (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page)}
+                        isActive={currentPage === page}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return (
+                    <PaginationItem key={page}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  );
+                }
+                return null;
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
       )}
 
       {selectedProperty && (

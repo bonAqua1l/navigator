@@ -532,6 +532,22 @@ export default function PropertyDetails() {
                 );
               })()}
             </CardHeader>
+            {property.price_in_hand && (
+              <CardContent className="pt-0">
+                <div className="border-t pt-4">
+                  <p className="text-sm text-muted-foreground mb-2">Цена на руки</p>
+                  {(() => {
+                    const { original, converted } = formatPrice(property.price_in_hand, property.currency, property.exchange_rate);
+                    return (
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">{original}</div>
+                        {converted && <div className="text-xs text-muted-foreground mt-1">{converted}</div>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </CardContent>
+            )}
           </Card>
 
           {/* Owner Contact - Only visible to author, collaborators and super admin */}
