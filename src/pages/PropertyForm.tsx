@@ -16,7 +16,7 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import PhotoPreview from "@/components/PhotoPreview";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Upload, X, UserPlus } from "lucide-react";
+import { ArrowLeft, Save, Upload, X, UserPlus, GripVertical } from "lucide-react";
 import {
   PropertyActionCategory,
   PropertyCategory,
@@ -84,6 +84,8 @@ export default function PropertyForm() {
   const [selectedCommunications, setSelectedCommunications] = useState<string[]>([]);
   const [selectedFurniture, setSelectedFurniture] = useState<string[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [existingPhotos, setExistingPhotos] = useState<Array<{ id: string; photo_url: string; display_order: number }>>([]);
+  const [photosToDelete, setPhotosToDelete] = useState<string[]>([]);
 
   // Collaborators state
   const [collaborators, setCollaborators] = useState<any[]>([]);
@@ -159,6 +161,10 @@ export default function PropertyForm() {
         }
         if (data.property_furniture_types) {
           setSelectedFurniture(data.property_furniture_types.map((ft: any) => ft.furniture_type_id));
+        }
+        if (data.property_photos) {
+          const sortedPhotos = [...data.property_photos].sort((a, b) => a.display_order - b.display_order);
+          setExistingPhotos(sortedPhotos);
         }
       }
     } catch (error) {
@@ -327,8 +333,12 @@ export default function PropertyForm() {
       return;
     }
 
-    // Проверка фотографий только для новых объявлений
-    if (!isEditMode && selectedImages.length === 0) {
+    // Проверка фотографий
+    const totalPhotos = isEditMode
+      ? existingPhotos.length - photosToDelete.length + selectedImages.length
+      : selectedImages.length;
+
+    if (totalPhotos === 0) {
       toast({
         variant: "destructive",
         title: "Ошибка",
@@ -454,17 +464,122 @@ export default function PropertyForm() {
           .insert(selectedFurniture.map((id) => ({ property_id: propertyIdToUse, furniture_type_id: id })));
       }
 
-      // Загрузка новых изображений
-      if (selectedImages.length > 0) {
+      // Обработка фотографий в режиме редактирования
+      let uploadedPhotosCount = 0;
+      let failedPhotosCount = 0;
+
+      if (isEditMode) {
+        // Удаление отмеченных фотографий
+        if (photosToDelete.length > 0) {
+          for (const photoId of photosToDelete) {
+            const photo = existingPhotos.find(p => p.id === photoId);
+            if (photo) {
+              // Удаление из storage
+              const photoPath = photo.photo_url.split('/').slice(-3).join('/');
+              await supabase.storage.from("property-photos").remove([photoPath]);
+
+              // Удаление из базы
+              await supabase.from("property_photos").delete().eq("id", photoId);
+            }
+          }
+        }
+
+        // Обновление порядка существующих фотографий
+        const remainingPhotos = existingPhotos.filter(p => !photosToDelete.includes(p.id));
+        for (const photo of remainingPhotos) {
+          await supabase
+            .from("property_photos")
+            .update({ display_order: photo.display_order })
+            .eq("id", photo.id);
+        }
+
+        // Добавление новых фотографий
+        const startOrder = remainingPhotos.length;
+        console.log('Adding new photos in edit mode:', {
+          selectedImagesCount: selectedImages.length,
+          startOrder,
+          propertyId: propertyIdToUse
+        });
+
+        if (selectedImages.length > 0) {
+          for (let i = 0; i < selectedImages.length; i++) {
+            const file = selectedImages[i];
+            const fileExt = file.name.split(".").pop();
+            const fileName = `${user?.id}/${propertyIdToUse}/${Date.now()}_${i}.${fileExt}`;
+
+            console.log('Uploading photo:', fileName);
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from("property-photos")
+              .upload(fileName, file);
+
+            if (uploadError) {
+              console.error("Image upload error:", uploadError);
+              failedPhotosCount++;
+              toast({
+                variant: "destructive",
+                title: "Ошибка загрузки фото",
+                description: `Не удалось загрузить ${file.name}: ${uploadError.message}`,
+              });
+              continue;
+            }
+
+            const {
+              data: { publicUrl },
+            } = supabase.storage.from("property-photos").getPublicUrl(fileName);
+
+            console.log('Inserting photo to DB:', { publicUrl, display_order: startOrder + i });
+
+            const { data: insertData, error: insertError } = await supabase
+              .from("property_photos")
+              .insert({
+                property_id: propertyIdToUse,
+                photo_url: publicUrl,
+                display_order: startOrder + i,
+              })
+              .select();
+
+            if (insertError) {
+              console.error("Photo insert error:", insertError);
+              failedPhotosCount++;
+              toast({
+                variant: "destructive",
+                title: "Ошибка",
+                description: `Не удалось сохранить фото в БД: ${insertError.message}`,
+              });
+            } else {
+              uploadedPhotosCount++;
+              console.log('Photo inserted successfully:', insertData);
+            }
+          }
+          console.log('Finished adding new photos:', { uploadedPhotosCount, failedPhotosCount });
+        }
+      } else {
+        // Загрузка новых изображений при создании
+        console.log('Adding photos for new property:', {
+          selectedImagesCount: selectedImages.length,
+          propertyId: propertyIdToUse
+        });
+
         for (let i = 0; i < selectedImages.length; i++) {
           const file = selectedImages[i];
           const fileExt = file.name.split(".").pop();
           const fileName = `${user.id}/${propertyIdToUse}/${Date.now()}_${i}.${fileExt}`;
 
-          const { error: uploadError } = await supabase.storage.from("property-photos").upload(fileName, file);
+          console.log('Uploading photo for new property:', fileName);
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from("property-photos")
+            .upload(fileName, file);
 
           if (uploadError) {
             console.error("Image upload error:", uploadError);
+            failedPhotosCount++;
+            toast({
+              variant: "destructive",
+              title: "Ошибка загрузки фото",
+              description: `Не удалось загрузить ${file.name}: ${uploadError.message}`,
+            });
             continue;
           }
 
@@ -472,17 +587,49 @@ export default function PropertyForm() {
             data: { publicUrl },
           } = supabase.storage.from("property-photos").getPublicUrl(fileName);
 
-          await supabase.from("property_photos").insert({
-            property_id: propertyIdToUse,
-            photo_url: publicUrl,
-            display_order: i,
-          });
+          console.log('Inserting photo to DB for new property:', { publicUrl, display_order: i });
+
+          const { data: insertData, error: insertError } = await supabase
+            .from("property_photos")
+            .insert({
+              property_id: propertyIdToUse,
+              photo_url: publicUrl,
+              display_order: i,
+            })
+            .select();
+
+          if (insertError) {
+            console.error("Photo insert error:", insertError);
+            failedPhotosCount++;
+            toast({
+              variant: "destructive",
+              title: "Ошибка",
+              description: `Не удалось сохранить фото в БД: ${insertError.message}`,
+            });
+          } else {
+            uploadedPhotosCount++;
+            console.log('Photo inserted successfully:', insertData);
+          }
         }
+        console.log('Finished adding photos for new property:', { uploadedPhotosCount, failedPhotosCount });
+      }
+
+      // Очистка состояния после успешного сохранения
+      setSelectedImages([]);
+      setPhotosToDelete([]);
+
+      // Формируем сообщение о результате загрузки фотографий
+      let photoMessage = "";
+      if (uploadedPhotosCount > 0) {
+        photoMessage = ` Загружено фото: ${uploadedPhotosCount}`;
+      }
+      if (failedPhotosCount > 0) {
+        photoMessage += ` Ошибок: ${failedPhotosCount}`;
       }
 
       toast({
         title: "Успешно",
-        description: isEditMode ? "Объявление обновлено" : "Объявление создано",
+        description: `${isEditMode ? "Объявление обновлено" : "Объявление создано"}${photoMessage}`,
       });
 
       navigate(isEditMode ? `/properties/${propertyId}` : "/my-properties");
@@ -500,7 +647,8 @@ export default function PropertyForm() {
 
   const handleImageSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length + selectedImages.length > 20) {
+    const totalPhotos = existingPhotos.length - photosToDelete.length + selectedImages.length + files.length;
+    if (totalPhotos > 20) {
       toast({
         variant: "destructive",
         title: "Ошибка",
@@ -515,11 +663,49 @@ export default function PropertyForm() {
     setSelectedImages(selectedImages.filter((_, i) => i !== index));
   };
 
+  const handleRemoveExistingPhoto = (photoId: string) => {
+    setPhotosToDelete([...photosToDelete, photoId]);
+  };
+
+  const handleRestorePhoto = (photoId: string) => {
+    setPhotosToDelete(photosToDelete.filter(id => id !== photoId));
+  };
+
   const handleReorderImages = (fromIndex: number, toIndex: number) => {
     const newImages = [...selectedImages];
     const [movedImage] = newImages.splice(fromIndex, 1);
     newImages.splice(toIndex, 0, movedImage);
     setSelectedImages(newImages);
+  };
+
+  const handleReorderExistingPhotos = (fromIndex: number, toIndex: number) => {
+    const newPhotos = [...existingPhotos];
+    const [movedPhoto] = newPhotos.splice(fromIndex, 1);
+    newPhotos.splice(toIndex, 0, movedPhoto);
+    // Update display_order
+    const updatedPhotos = newPhotos.map((photo, index) => ({
+      ...photo,
+      display_order: index
+    }));
+    setExistingPhotos(updatedPhotos);
+  };
+
+  const handleExistingPhotoDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', index.toString());
+  };
+
+  const handleExistingPhotoDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleExistingPhotoDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    const fromIndex = parseInt(e.dataTransfer.getData('text/html'));
+    if (fromIndex !== toIndex) {
+      handleReorderExistingPhotos(fromIndex, toIndex);
+    }
   };
 
   // Условная логика: показывать поле площади участка только для домов и участков
@@ -967,15 +1153,83 @@ export default function PropertyForm() {
                   Первая фотография будет главной. Максимум 20 фотографий.
                 </p>
               </div>
+
+              {/* Существующие фотографии */}
+              {isEditMode && existingPhotos.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Текущие фотографии</Label>
+                  <p className="text-xs text-muted-foreground">Перетащите для изменения порядка</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {existingPhotos.map((photo, index) => (
+                      <Card
+                        key={photo.id}
+                        className={`relative group overflow-hidden ${
+                          photosToDelete.includes(photo.id)
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'cursor-move'
+                        }`}
+                        draggable={!photosToDelete.includes(photo.id)}
+                        onDragStart={(e) => handleExistingPhotoDragStart(e, index)}
+                        onDragOver={handleExistingPhotoDragOver}
+                        onDrop={(e) => handleExistingPhotoDrop(e, index)}
+                      >
+                        <div className="aspect-square bg-muted">
+                          <img
+                            src={photo.photo_url}
+                            alt={`Фото ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="absolute top-2 left-2 bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                          {index + 1}
+                        </div>
+                        <div className="absolute top-2 right-2">
+                          {photosToDelete.includes(photo.id) ? (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="secondary"
+                              className="h-8 w-8 opacity-100"
+                              onClick={() => handleRestorePhoto(photo.id)}
+                            >
+                              <Upload className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveExistingPhoto(photo.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        {photosToDelete.includes(photo.id) ? (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
+                            <span className="text-white text-xs font-medium">Удалено</span>
+                          </div>
+                        ) : (
+                          <div className="absolute bottom-2 right-2 bg-background/80 rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-4">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => document.getElementById("images")?.click()}
-                  disabled={selectedImages.length >= 20}
+                  disabled={existingPhotos.length - photosToDelete.length + selectedImages.length >= 20}
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Выбрать фотографии
+                  {isEditMode ? 'Добавить фотографии' : 'Выбрать фотографии'}
                 </Button>
                 <Input
                   id="images"
@@ -985,11 +1239,20 @@ export default function PropertyForm() {
                   className="hidden"
                   onChange={handleImageSelection}
                 />
-                {selectedImages.length > 0 && (
-                  <span className="text-sm text-muted-foreground">Загружено: {selectedImages.length}/20</span>
+                {(existingPhotos.length > 0 || selectedImages.length > 0) && (
+                  <span className="text-sm text-muted-foreground">
+                    Всего: {existingPhotos.length - photosToDelete.length + selectedImages.length}/20
+                  </span>
                 )}
               </div>
-              <PhotoPreview files={selectedImages} onRemove={handleRemoveImage} onReorder={handleReorderImages} />
+
+              {/* Новые фотографии */}
+              {selectedImages.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Новые фотографии</Label>
+                  <PhotoPreview files={selectedImages} onRemove={handleRemoveImage} onReorder={handleReorderImages} />
+                </div>
+              )}
             </div>
 
             {/* Группа 9: Контакты собственника */}
