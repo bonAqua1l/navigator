@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Search, MapPin, Home, Filter } from "lucide-react";
 import { ROOM_OPTIONS } from "@/types/property";
 import { formatPrice } from "@/lib/priceUtils";
+import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
 import navigatorLogo from "@/assets/navigator-house-logo.png";
 import { useInView } from "react-intersection-observer";
 
@@ -45,7 +46,7 @@ const Properties = () => {
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [subcategoryFilter, setSubcategoryFilter] = useState<string>("all");
-  const [areaFilter, setAreaFilter] = useState<string>("all");
+  const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [roomsFilter, setRoomsFilter] = useState<string>("all");
   const [conditionFilter, setConditionFilter] = useState<string>("all");
   const [developerFilter, setDeveloperFilter] = useState<string>("all");
@@ -53,7 +54,7 @@ const Properties = () => {
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   const [displayedCount, setDisplayedCount] = useState(ITEMS_PER_LOAD);
-  
+
   const [actionCategories, setActionCategories] = useState<any[]>([]);
   const [propertyCategories, setPropertyCategories] = useState<any[]>([]);
   const [propertySubcategories, setPropertySubcategories] = useState<any[]>([]);
@@ -80,7 +81,7 @@ const Properties = () => {
         supabase.from("property_conditions").select("*").order("name"),
         supabase.from("property_developers").select("*").order("name")
       ]);
-      
+
       setActionCategories(actionsRes.data || []);
       setPropertyCategories(categoriesRes.data || []);
       setPropertySubcategories(subcategoriesRes.data || []);
@@ -161,28 +162,28 @@ const Properties = () => {
       searchTerm === "" ||
       property.property_number.toString().includes(searchTerm) ||
       property.property_areas?.name.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesAction =
       actionFilter === "all" || property.property_action_category_id === actionFilter;
-    
+
     const matchesCategory =
       categoryFilter === "all" || property.property_category_id === categoryFilter;
-    
+
     const matchesSubcategory =
       subcategoryFilter === "all" || property.property_subcategory_id === subcategoryFilter;
-    
+
     const matchesArea =
-      areaFilter === "all" || property.property_area_id === areaFilter;
-    
+      areaFilter.length === 0 || areaFilter.includes(property.property_area_id || '');
+
     const matchesRooms =
       roomsFilter === "all" || property.property_rooms === roomsFilter;
-    
+
     const matchesCondition =
       conditionFilter === "all" || property.property_condition_id === conditionFilter;
-    
+
     const matchesDeveloper =
       developerFilter === "all" || property.property_developer === developerFilter;
-    
+
     const minPriceNum = minPrice ? parseFloat(minPrice) : 0;
     const maxPriceNum = maxPrice ? parseFloat(maxPrice) : Infinity;
     const matchesPrice =
@@ -348,22 +349,16 @@ const Properties = () => {
                   </Select>
                 </div>
 
-                {/* Area */}
+                {/* Area (Multi-Select) */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Район</label>
-                  <Select value={areaFilter} onValueChange={setAreaFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {areas.map((area) => (
-                        <SelectItem key={area.id} value={area.id}>
-                          {area.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={areas}
+                    selected={areaFilter}
+                    onChange={setAreaFilter}
+                    placeholder="Все районы"
+                    searchPlaceholder="Поиск района..."
+                  />
                 </div>
 
                 {/* Condition */}
@@ -426,15 +421,15 @@ const Properties = () => {
 
                 {/* Reset Filters */}
                 <div className="lg:col-span-3 flex justify-end">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => {
                       setSearchTerm("");
                       setActionFilter("all");
                       setCategoryFilter("all");
                       setSubcategoryFilter("all");
-                      setAreaFilter("all");
+                      setAreaFilter([]);
                       setRoomsFilter("all");
                       setConditionFilter("all");
                       setDeveloperFilter("all");
@@ -468,78 +463,84 @@ const Properties = () => {
             <>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {visibleProperties.map((property) => (
-                  <Card
+                  <a
                     key={property.id}
-                    className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                    onClick={() => navigate(`/properties/${property.id}/public`)}
+                    href={`/properties/${property.id}/public`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block no-underline text-inherit"
                   >
-                    <div className="aspect-video bg-muted relative overflow-hidden">
-                      {property.property_photos?.[0] ? (
-                        <img
-                          src={property.property_photos[0].photo_url}
-                          alt={`Объект №${property.property_number}`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex items-center justify-center h-full">
-                          <Home className="h-16 w-16 text-muted-foreground" />
+                    <Card
+                      className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full"
+                    >
+                      <div className="aspect-video bg-muted relative overflow-hidden">
+                        {property.property_photos?.[0] ? (
+                          <img
+                            src={property.property_photos[0].photo_url}
+                            alt={`Объект №${property.property_number}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <Home className="h-16 w-16 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="absolute top-2 right-2">
+                          <Badge className="bg-primary text-primary-foreground">
+                            {property.property_action_categories?.name || "—"}
+                          </Badge>
                         </div>
-                      )}
-                      <div className="absolute top-2 right-2">
-                        <Badge className="bg-primary text-primary-foreground">
-                          {property.property_action_categories?.name || "—"}
-                        </Badge>
                       </div>
-                    </div>
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-xl">
-                          Объект №{property.property_number}
-                        </CardTitle>
-                        <Badge variant="secondary">
-                          {property.property_categories?.name || "—"}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                    {property.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
-                      {truncateDescription(property.description, 120)}
-                    </p>
-                  )}
-                      {property.property_size && (
-                        <p className="text-sm text-muted-foreground">
-                          Площадь: {property.property_size} м²
-                        </p>
-                      )}
-                      {property.property_rooms && (
-                        <p className="text-sm text-muted-foreground">
-                          Комнат: {property.property_rooms}
-                        </p>
-                      )}
-                      <div className="pt-2 border-t">
-                        {(() => {
-                          const { original, converted } = formatPrice(property.price, property.currency, property.exchange_rate);
-                          return (
-                            <div>
-                              <p className="text-2xl font-bold text-primary">{original}</p>
-                              {converted && <p className="text-sm text-muted-foreground mt-1">{converted}</p>}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-2">
+                          <CardTitle className="text-xl">
+                            Объект №{property.property_number}
+                          </CardTitle>
+                          <Badge variant="secondary">
+                            {property.property_categories?.name || "—"}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {property.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+                            {truncateDescription(property.description, 120)}
+                          </p>
+                        )}
+                        {property.property_size && (
+                          <p className="text-sm text-muted-foreground">
+                            Площадь: {property.property_size} м²
+                          </p>
+                        )}
+                        {property.property_rooms && (
+                          <p className="text-sm text-muted-foreground">
+                            Комнат: {property.property_rooms}
+                          </p>
+                        )}
+                        <div className="pt-2 border-t">
+                          {(() => {
+                            const { original, converted } = formatPrice(property.price, property.currency, property.exchange_rate);
+                            return (
+                              <div>
+                                <p className="text-2xl font-bold text-primary">{original}</p>
+                                {converted && <p className="text-sm text-muted-foreground mt-1">{converted}</p>}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </a>
                 ))}
               </div>
-              
+
               {/* Loading indicator and sentinel */}
               {hasMore && (
                 <div ref={ref} className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                 </div>
               )}
-              
+
               {!hasMore && visibleProperties.length > 0 && (
                 <p className="text-center text-muted-foreground py-8">
                   Показаны все объекты ({filteredProperties.length})

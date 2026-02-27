@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Property } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, TrendingUp, Calendar, Star, Filter, X, Check, ChevronsUpDown } from 'lucide-react';
+import { Building2, TrendingUp, Calendar, Star, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
+
 import { ROOM_OPTIONS } from '@/types/property';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -21,20 +21,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import { cn } from '@/lib/utils';
+
+import { MultiSelectCombobox } from '@/components/MultiSelectCombobox';
 
 interface PropertyWithPhotos extends Property {
   property_photos?: Array<{ photo_url: string; display_order: number }>;
@@ -50,76 +38,28 @@ interface PropertyWithPhotos extends Property {
 
 const ITEMS_PER_PAGE = 12;
 
-interface MultiSelectProps {
-  options: Array<{ id: string; name: string }>;
-  selected: string[];
-  onChange: (selected: string[]) => void;
-  placeholder?: string;
-  searchPlaceholder?: string;
+const DASHBOARD_STATE_KEY = 'dashboard_state';
+
+function saveDashboardState(state: Record<string, any>) {
+  try {
+    sessionStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(state));
+  } catch (e) {
+    // ignore
+  }
 }
 
-function MultiSelectCombobox({ options, selected, onChange, placeholder = "Выберите...", searchPlaceholder = "Поиск..." }: MultiSelectProps) {
-  const [open, setOpen] = useState(false);
+function loadDashboardState(): Record<string, any> | null {
+  try {
+    const raw = sessionStorage.getItem(DASHBOARD_STATE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
 
-  const toggleOption = (optionId: string) => {
-    const newSelected = selected.includes(optionId)
-      ? selected.filter(id => id !== optionId)
-      : [...selected, optionId];
-    onChange(newSelected);
-  };
-
-  const getDisplayText = () => {
-    if (selected.length === 0) return placeholder;
-    if (selected.length === 1) {
-      const item = options.find(opt => opt.id === selected[0]);
-      return item?.name || placeholder;
-    }
-    return `Выбрано: ${selected.length}`;
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between"
-        >
-          <span className="truncate">{getDisplayText()}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
-            <CommandEmpty>Ничего не найдено</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.id}
-                  onSelect={() => toggleOption(option.id)}
-                  className="cursor-pointer"
-                >
-                  <div className="flex items-center gap-2 w-full">
-                    <Checkbox
-                      checked={selected.includes(option.id)}
-                      className="pointer-events-none"
-                    />
-                    <span className="flex-1">{option.name}</span>
-                    {selected.includes(option.id) && (
-                      <Check className="h-4 w-4" />
-                    )}
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
+function clearDashboardState() {
+  sessionStorage.removeItem(DASHBOARD_STATE_KEY);
 }
 
 export default function Dashboard() {
@@ -149,9 +89,65 @@ export default function Dashboard() {
   const [areas, setAreas] = useState<any[]>([]);
   const [conditions, setConditions] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
-  
+
+  const restoredRef = useRef(false);
   const { user, profile, isAdmin } = useAuth();
   const { toast } = useToast();
+
+  // Restore saved state on mount
+  useEffect(() => {
+    const saved = loadDashboardState();
+    if (saved) {
+      if (saved.searchQuery) setSearchQuery(saved.searchQuery);
+      if (saved.actionFilter) setActionFilter(saved.actionFilter);
+      if (saved.categoryFilter) setCategoryFilter(saved.categoryFilter);
+      if (saved.subcategoryFilter) setSubcategoryFilter(saved.subcategoryFilter);
+      if (saved.areaFilter) setAreaFilter(saved.areaFilter);
+      if (saved.roomsFilter) setRoomsFilter(saved.roomsFilter);
+      if (saved.conditionFilter) setConditionFilter(saved.conditionFilter);
+      if (saved.managerFilter) setManagerFilter(saved.managerFilter);
+      if (saved.minPrice) setMinPrice(saved.minPrice);
+      if (saved.maxPrice) setMaxPrice(saved.maxPrice);
+      if (saved.currentPage) setCurrentPage(saved.currentPage);
+      if (saved.showFilters) setShowFilters(saved.showFilters);
+      restoredRef.current = true;
+      clearDashboardState();
+    }
+  }, []);
+
+  // Restore scroll position after data loads
+  useEffect(() => {
+    if (!loading && restoredRef.current) {
+      const saved = sessionStorage.getItem(DASHBOARD_STATE_KEY + '_scrollY');
+      if (saved) {
+        const scrollY = parseInt(saved, 10);
+        sessionStorage.removeItem(DASHBOARD_STATE_KEY + '_scrollY');
+        setTimeout(() => window.scrollTo(0, scrollY), 100);
+      }
+      restoredRef.current = false;
+    }
+  }, [loading]);
+
+  const navigateToProperty = useCallback((propertyId: string) => {
+    // Save current state before navigating
+    saveDashboardState({
+      searchQuery,
+      actionFilter,
+      categoryFilter,
+      subcategoryFilter,
+      areaFilter,
+      roomsFilter,
+      conditionFilter,
+      managerFilter,
+      minPrice,
+      maxPrice,
+      currentPage,
+      showFilters,
+    });
+    // Save scroll position separately (so restore-on-mount reads filters first)
+    sessionStorage.setItem(DASHBOARD_STATE_KEY + '_scrollY', String(window.scrollY));
+    navigate(`/properties/${propertyId}`);
+  }, [navigate, searchQuery, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, managerFilter, minPrice, maxPrice, currentPage, showFilters]);
 
   useEffect(() => {
     fetchProperties();
@@ -201,22 +197,22 @@ export default function Dashboard() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       // Fetch featured properties info
       const { data: featuredData } = await supabase
         .from('featured_properties')
         .select('property_id, display_order');
-      
+
       const featuredMap = new Map(
         (featuredData || []).map(f => [f.property_id, f.display_order])
       );
-      
+
       const propertiesWithFeatured = (data || []).map(p => ({
         ...p,
         is_featured: featuredMap.has(p.id),
         featured_order: featuredMap.get(p.id)
       }));
-      
+
       setProperties(propertiesWithFeatured);
     } catch (error) {
       console.error('Error fetching properties:', error);
@@ -301,7 +297,7 @@ export default function Dashboard() {
 
   const toggleFeaturedProperty = async (propertyId: string, isFeatured: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     if (!isAdmin) {
       toast({
         variant: 'destructive',
@@ -665,32 +661,32 @@ export default function Dashboard() {
       {/* Properties Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {paginatedProperties.map((property) => (
-          <Card key={property.id} className="overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer" onClick={() => navigate(`/properties/${property.id}`)}>
+          <Card key={property.id} className="overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer" onClick={() => navigateToProperty(property.id)}>
             <div className="aspect-video bg-muted relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
               <div className="absolute top-4 right-4 z-20 flex gap-2">
                 {isAdmin && property.status === 'published' && (
-                  <Button 
-                    size="icon" 
+                  <Button
+                    size="icon"
                     variant={property.is_featured ? "default" : "secondary"}
                     className={`rounded-full shadow-lg ${property.is_featured ? 'bg-primary' : ''}`}
                     onClick={(e) => toggleFeaturedProperty(property.id, property.is_featured || false, e)}
                   >
-                    <Star 
+                    <Star
                       className={`h-4 w-4 ${property.is_featured ? 'fill-current' : ''}`}
                     />
                   </Button>
                 )}
-                <Button 
-                  size="icon" 
-                  variant="secondary" 
+                <Button
+                  size="icon"
+                  variant="secondary"
                   className="rounded-full shadow-lg"
                   onClick={(e) => {
                     e.stopPropagation();
                     toggleFavorite(property.id);
                   }}
                 >
-                  <Star 
+                  <Star
                     className={`h-4 w-4 ${favorites.has(property.id) ? 'fill-yellow-400 text-yellow-400' : ''}`}
                   />
                 </Button>
@@ -753,7 +749,7 @@ export default function Dashboard() {
                   </span>
                 </div>
               </div>
-              
+
               <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                 {property.property_size && (
                   <span className="flex items-center gap-1">
@@ -772,7 +768,7 @@ export default function Dashboard() {
                 )}
               </div>
 
-              <Button 
+              <Button
                 className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();

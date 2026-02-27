@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Search, UserCheck, UserX, Shield, UserPlus, Trash2 } from 'lucide-react';
+import { Search, UserCheck, UserX, Shield, UserPlus, Trash2, KeyRound } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FeaturedPropertiesManager } from '@/components/FeaturedPropertiesManager';
 import {
@@ -73,6 +73,11 @@ export default function Admin() {
     phone: '',
     role: 'manager' as AppRole
   });
+  const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
+  const [changePasswordUserId, setChangePasswordUserId] = useState<string>('');
+  const [changePasswordUserName, setChangePasswordUserName] = useState<string>('');
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -287,13 +292,70 @@ export default function Admin() {
     const matchesSearch =
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.full_name.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesRole =
       roleFilter === 'all' ||
       user.roles.some((r) => r.role === roleFilter);
 
     return matchesSearch && matchesRole;
   });
+
+  const openChangePasswordDialog = (userId: string, userName: string) => {
+    setChangePasswordUserId(userId);
+    setChangePasswordUserName(userName);
+    setNewPassword('');
+    setChangePasswordDialogOpen(true);
+  };
+
+  const changePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      toast({
+        variant: 'destructive',
+        title: '\u041e\u0448\u0438\u0431\u043a\u0430',
+        description: '\u041f\u0430\u0440\u043e\u043b\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043d\u0435 \u043c\u0435\u043d\u0435\u0435 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432',
+      });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `https://zikqbffckorauiasbbrg.supabase.co/functions/v1/update-user-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`
+          },
+          body: JSON.stringify({ userId: changePasswordUserId, newPassword })
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c');
+      }
+
+      toast({
+        title: '\u0423\u0441\u043f\u0435\u0448\u043d\u043e',
+        description: '\u041f\u0430\u0440\u043e\u043b\u044c \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0438\u0437\u043c\u0435\u043d\u0435\u043d',
+      });
+
+      setChangePasswordDialogOpen(false);
+      setNewPassword('');
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast({
+        variant: 'destructive',
+        title: '\u041e\u0448\u0438\u0431\u043a\u0430',
+        description: error instanceof Error ? error.message : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c',
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
@@ -380,70 +442,70 @@ export default function Admin() {
                     Введите данные для создания нового менеджера или стажера
                   </DialogDescription>
                 </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Полное имя *</Label>
-                <Input
-                  id="full_name"
-                  placeholder="Иванов Иван Иванович"
-                  value={newUserData.full_name}
-                  onChange={(e) => setNewUserData({ ...newUserData, full_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="manager@example.com"
-                  value={newUserData.email}
-                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Пароль *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Минимум 6 символов"
-                  value={newUserData.password}
-                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Телефон</Label>
-                <Input
-                  id="phone"
-                  placeholder="+996 XXX XXX XXX"
-                  value={newUserData.phone}
-                  onChange={(e) => setNewUserData({ ...newUserData, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Роль *</Label>
-                <Select 
-                  value={newUserData.role} 
-                  onValueChange={(value) => setNewUserData({ ...newUserData, role: value as AppRole })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manager">Менеджер</SelectItem>
-                    <SelectItem value="intern">Стажер</SelectItem>
-                    <SelectItem value="super_admin">Супер Админ</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateDialogOpen(false)} disabled={creatingUser}>
-                Отмена
-              </Button>
-              <Button onClick={createUser} disabled={creatingUser}>
-                {creatingUser ? 'Создание...' : 'Создать'}
-              </Button>
-            </div>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name">Полное имя *</Label>
+                    <Input
+                      id="full_name"
+                      placeholder="Иванов Иван Иванович"
+                      value={newUserData.full_name}
+                      onChange={(e) => setNewUserData({ ...newUserData, full_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="manager@example.com"
+                      value={newUserData.email}
+                      onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Пароль *</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Минимум 6 символов"
+                      value={newUserData.password}
+                      onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Телефон</Label>
+                    <Input
+                      id="phone"
+                      placeholder="+996 XXX XXX XXX"
+                      value={newUserData.phone}
+                      onChange={(e) => setNewUserData({ ...newUserData, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="role">Роль *</Label>
+                    <Select
+                      value={newUserData.role}
+                      onValueChange={(value) => setNewUserData({ ...newUserData, role: value as AppRole })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="manager">Менеджер</SelectItem>
+                        <SelectItem value="intern">Стажер</SelectItem>
+                        <SelectItem value="super_admin">Супер Админ</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setCreateDialogOpen(false)} disabled={creatingUser}>
+                    Отмена
+                  </Button>
+                  <Button onClick={createUser} disabled={creatingUser}>
+                    {creatingUser ? 'Создание...' : 'Создать'}
+                  </Button>
+                </div>
               </DialogContent>
             </Dialog>
           </div>
@@ -475,149 +537,157 @@ export default function Admin() {
             {/* Desktop Table View */}
             <div className="hidden md:block rounded-md border">
               <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Пользователь</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Телефон</TableHead>
-                <TableHead>Роли</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Дата регистрации</TableHead>
-                <TableHead className="text-right">Действия</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    Пользователи не найдены
-                  </TableCell>
-                </TableRow>
-              ) : (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
-                            <AvatarFallback>
-                              {user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium">{user.full_name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>{user.phone || '—'}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 flex-wrap">
-                        {user.roles.length === 0 ? (
-                          <span className="text-sm text-muted-foreground">Нет ролей</span>
-                        ) : (
-                          user.roles.map((role, idx) => (
-                            <Badge
-                              key={idx}
-                              variant={getRoleBadgeVariant(role.role) as any}
-                              className="cursor-pointer"
-                              onClick={() => removeRole(user.id, role.role)}
-                            >
-                              {getRoleLabel(role.role)} ×
-                            </Badge>
-                          ))
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {user.is_active ? (
-                        <Badge variant="default">Активен</Badge>
-                      ) : (
-                        <Badge variant="secondary">Неактивен</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(user.created_at).toLocaleDateString('ru-RU')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Shield className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Назначить роль</DialogTitle>
-                              <DialogDescription>
-                                Выберите роль для {user.full_name}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-2">
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => assignRole(user.id, 'super_admin')}
-                              >
-                                Супер Админ
-                              </Button>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => assignRole(user.id, 'manager')}
-                              >
-                                Менеджер
-                              </Button>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => assignRole(user.id, 'intern')}
-                              >
-                                Стажер
-                              </Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleUserStatus(user.id, user.is_active)}
-                        >
-                          {user.is_active ? (
-                            <UserX className="h-4 w-4" />
-                          ) : (
-                            <UserCheck className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Вы уверены, что хотите удалить {user.full_name}? Это действие нельзя отменить.
-                                Все данные пользователя будут безвозвратно удалены.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Отмена</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteUser(user.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Удалить
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Пользователь</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Телефон</TableHead>
+                    <TableHead>Роли</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead>Дата регистрации</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
-                ))
-              )}
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        Пользователи не найдены
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={user.avatar_url || undefined} alt={user.full_name} />
+                              <AvatarFallback>
+                                {user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="font-medium">{user.full_name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>{user.phone || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {user.roles.length === 0 ? (
+                              <span className="text-sm text-muted-foreground">Нет ролей</span>
+                            ) : (
+                              user.roles.map((role, idx) => (
+                                <Badge
+                                  key={idx}
+                                  variant={getRoleBadgeVariant(role.role) as any}
+                                  className="cursor-pointer"
+                                  onClick={() => removeRole(user.id, role.role)}
+                                >
+                                  {getRoleLabel(role.role)} ×
+                                </Badge>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {user.is_active ? (
+                            <Badge variant="default">Активен</Badge>
+                          ) : (
+                            <Badge variant="secondary">Неактивен</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(user.created_at).toLocaleDateString('ru-RU')}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Shield className="h-4 w-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Назначить роль</DialogTitle>
+                                  <DialogDescription>
+                                    Выберите роль для {user.full_name}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-2">
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => assignRole(user.id, 'super_admin')}
+                                  >
+                                    Супер Админ
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => assignRole(user.id, 'manager')}
+                                  >
+                                    Менеджер
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start"
+                                    onClick={() => assignRole(user.id, 'intern')}
+                                  >
+                                    Стажер
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openChangePasswordDialog(user.id, user.full_name)}
+                              title="\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c"
+                            >
+                              <KeyRound className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleUserStatus(user.id, user.is_active)}
+                            >
+                              {user.is_active ? (
+                                <UserX className="h-4 w-4" />
+                              ) : (
+                                <UserCheck className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Вы уверены, что хотите удалить {user.full_name}? Это действие нельзя отменить.
+                                    Все данные пользователя будут безвозвратно удалены.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteUser(user.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Удалить
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -722,6 +792,15 @@ export default function Admin() {
                           variant="outline"
                           size="sm"
                           className="text-xs"
+                          onClick={() => openChangePasswordDialog(user.id, user.full_name)}
+                        >
+                          <KeyRound className="h-3 w-3 mr-1" />
+                          \u041f\u0430\u0440\u043e\u043b\u044c
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
                           onClick={() => toggleUserStatus(user.id, user.is_active)}
                         >
                           {user.is_active ? (
@@ -768,6 +847,38 @@ export default function Admin() {
           <FeaturedPropertiesManager />
         </TabsContent>
       </Tabs>
+
+      {/* Change Password Dialog */}
+      <Dialog open={changePasswordDialogOpen} onOpenChange={setChangePasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c</DialogTitle>
+            <DialogDescription>
+              \u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 \u043d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c \u0434\u043b\u044f {changePasswordUserName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">\u041d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c *</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                placeholder="\u041c\u0438\u043d\u0438\u043c\u0443\u043c 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setChangePasswordDialogOpen(false)} disabled={changingPassword}>
+              \u041e\u0442\u043c\u0435\u043d\u0430
+            </Button>
+            <Button onClick={changePassword} disabled={changingPassword}>
+              {changingPassword ? '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...' : '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

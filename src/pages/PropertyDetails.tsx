@@ -7,10 +7,21 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Building2, MapPin, Ruler, Home, Calendar, Phone, User, DollarSign, Star, Edit } from 'lucide-react';
+import { ArrowLeft, Building2, MapPin, Ruler, Home, Calendar, Phone, User, DollarSign, Star, Edit, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/lib/priceUtils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export default function PropertyDetails() {
   const { id } = useParams<{ id: string }>();
@@ -108,7 +119,7 @@ export default function PropertyDetails() {
 
   const checkCollaborator = async () => {
     if (!user?.id || !id) return;
-    
+
     try {
       const { data } = await supabase
         .from('property_collaborators')
@@ -272,6 +283,57 @@ export default function PropertyDetails() {
               Редактировать
             </Button>
           )}
+          {isAdmin && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Удалить объявление?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Вы уверены, что хотите удалить объявление №{property.property_number}?
+                    Объявление будет перемещено в корзину.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      try {
+                        const { error } = await supabase
+                          .from('properties')
+                          .update({
+                            status: 'deleted',
+                            deleted_at: new Date().toISOString(),
+                            deleted_by: user?.id
+                          })
+                          .eq('id', id);
+                        if (error) throw error;
+                        toast({
+                          title: 'Успешно',
+                          description: 'Объявление перемещено в корзину',
+                        });
+                        navigate('/dashboard');
+                      } catch (error) {
+                        console.error('Error deleting property:', error);
+                        toast({
+                          variant: 'destructive',
+                          title: 'Ошибка',
+                          description: 'Не удалось удалить объявление',
+                        });
+                      }
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Удалить
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <Button
             variant="outline"
             size="icon"
@@ -309,9 +371,8 @@ export default function PropertyDetails() {
                   <button
                     key={photo.id}
                     onClick={() => setSelectedPhoto(index)}
-                    className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
-                      selectedPhoto === index ? 'border-primary' : 'border-transparent'
-                    }`}
+                    className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${selectedPhoto === index ? 'border-primary' : 'border-transparent'
+                      }`}
                   >
                     <img
                       src={photo.photo_url}
