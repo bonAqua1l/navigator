@@ -311,8 +311,8 @@ export default function Admin() {
     if (!newPassword || newPassword.length < 6) {
       toast({
         variant: 'destructive',
-        title: '\u041e\u0448\u0438\u0431\u043a\u0430',
-        description: '\u041f\u0430\u0440\u043e\u043b\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0431\u044b\u0442\u044c \u043d\u0435 \u043c\u0435\u043d\u0435\u0435 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432',
+        title: 'Ошибка',
+        description: 'Пароль должен быть не менее 6 символов',
       });
       return;
     }
@@ -335,12 +335,12 @@ export default function Admin() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c');
+        throw new Error(result.error || 'Не удалось изменить пароль');
       }
 
       toast({
-        title: '\u0423\u0441\u043f\u0435\u0448\u043d\u043e',
-        description: '\u041f\u0430\u0440\u043e\u043b\u044c \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0438\u0437\u043c\u0435\u043d\u0435\u043d',
+        title: 'Успешно',
+        description: 'Пароль успешно изменен',
       });
 
       setChangePasswordDialogOpen(false);
@@ -349,8 +349,8 @@ export default function Admin() {
       console.error('Error changing password:', error);
       toast({
         variant: 'destructive',
-        title: '\u041e\u0448\u0438\u0431\u043a\u0430',
-        description: error instanceof Error ? error.message : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c',
+        title: 'Ошибка',
+        description: error instanceof Error ? error.message : 'Не удалось изменить пароль',
       });
     } finally {
       setChangingPassword(false);
@@ -382,6 +382,8 @@ export default function Admin() {
         return role;
     }
   };
+
+  const isManagerUser = (user: UserWithRole) => user.roles.some((role) => role.role === 'manager');
 
   if (!isAdmin) {
     return (
@@ -642,8 +644,9 @@ export default function Admin() {
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={!isManagerUser(user)}
                               onClick={() => openChangePasswordDialog(user.id, user.full_name)}
-                              title="\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c"
+                              title={isManagerUser(user) ? 'Сменить пароль менеджера' : 'Смена пароля доступна только для менеджеров'}
                             >
                               <KeyRound className="h-4 w-4" />
                             </Button>
@@ -660,7 +663,12 @@ export default function Admin() {
                             </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!isManagerUser(user)}
+                                  title={isManagerUser(user) ? 'Удалить менеджера' : 'Удаление доступно только для менеджеров'}
+                                >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -792,10 +800,11 @@ export default function Admin() {
                           variant="outline"
                           size="sm"
                           className="text-xs"
+                          disabled={!isManagerUser(user)}
                           onClick={() => openChangePasswordDialog(user.id, user.full_name)}
                         >
                           <KeyRound className="h-3 w-3 mr-1" />
-                          \u041f\u0430\u0440\u043e\u043b\u044c
+                          Пароль
                         </Button>
                         <Button
                           variant="outline"
@@ -812,7 +821,12 @@ export default function Admin() {
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="text-xs">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              disabled={!isManagerUser(user)}
+                            >
                               <Trash2 className="h-3 w-3" />
                             </Button>
                           </AlertDialogTrigger>
@@ -852,18 +866,18 @@ export default function Admin() {
       <Dialog open={changePasswordDialogOpen} onOpenChange={setChangePasswordDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c</DialogTitle>
+            <DialogTitle>Сменить пароль</DialogTitle>
             <DialogDescription>
-              \u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u0435 \u043d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c \u0434\u043b\u044f {changePasswordUserName}
+              Установите новый пароль для менеджера {changePasswordUserName}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="newPassword">\u041d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c *</Label>
+              <Label htmlFor="newPassword">Новый пароль *</Label>
               <Input
                 id="newPassword"
                 type="password"
-                placeholder="\u041c\u0438\u043d\u0438\u043c\u0443\u043c 6 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432"
+                placeholder="Минимум 6 символов"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
@@ -871,10 +885,10 @@ export default function Admin() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setChangePasswordDialogOpen(false)} disabled={changingPassword}>
-              \u041e\u0442\u043c\u0435\u043d\u0430
+              Отмена
             </Button>
             <Button onClick={changePassword} disabled={changingPassword}>
-              {changingPassword ? '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...' : '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c'}
+              {changingPassword ? 'Сохранение...' : 'Сохранить'}
             </Button>
           </div>
         </DialogContent>

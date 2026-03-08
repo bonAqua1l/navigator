@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Property } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,6 +64,7 @@ function clearDashboardState() {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [properties, setProperties] = useState<PropertyWithPhotos[]>([]);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -71,6 +72,8 @@ export default function Dashboard() {
   const [viewingDialogOpen, setViewingDialogOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<{ id: string; number: number } | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [hoveredPropertyId, setHoveredPropertyId] = useState<string | null>(null);
+  const [photoIndexes, setPhotoIndexes] = useState<Record<string, number>>({});
 
   const [actionFilter, setActionFilter] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -81,7 +84,10 @@ export default function Dashboard() {
   const [managerFilter, setManagerFilter] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageFromUrl = Number(searchParams.get('page'));
+    return Number.isFinite(pageFromUrl) && pageFromUrl > 0 ? pageFromUrl : 1;
+  });
 
   const [actionCategories, setActionCategories] = useState<any[]>([]);
   const [propertyCategories, setPropertyCategories] = useState<any[]>([]);
@@ -91,6 +97,9 @@ export default function Dashboard() {
   const [managers, setManagers] = useState<any[]>([]);
 
   const restoredRef = useRef(false);
+  const isRestoringFiltersRef = useRef(false);
+  const restoredFiltersSnapshotRef = useRef<string | null>(null);
+  const propertiesGridRef = useRef<HTMLDivElement | null>(null);
   const { user, profile, isAdmin } = useAuth();
   const { toast } = useToast();
 
@@ -98,14 +107,27 @@ export default function Dashboard() {
   useEffect(() => {
     const saved = loadDashboardState();
     if (saved) {
+      isRestoringFiltersRef.current = true;
+      restoredFiltersSnapshotRef.current = JSON.stringify({
+        searchQuery: saved.searchQuery || '',
+        actionFilter: saved.actionFilter || [],
+        categoryFilter: saved.categoryFilter || [],
+        subcategoryFilter: saved.subcategoryFilter || [],
+        areaFilter: saved.areaFilter || [],
+        roomsFilter: saved.roomsFilter || [],
+        conditionFilter: saved.conditionFilter || [],
+        managerFilter: saved.managerFilter || [],
+        minPrice: saved.minPrice || '',
+        maxPrice: saved.maxPrice || '',
+      });
       if (saved.searchQuery) setSearchQuery(saved.searchQuery);
-      if (saved.actionFilter) setActionFilter(saved.actionFilter);
-      if (saved.categoryFilter) setCategoryFilter(saved.categoryFilter);
-      if (saved.subcategoryFilter) setSubcategoryFilter(saved.subcategoryFilter);
-      if (saved.areaFilter) setAreaFilter(saved.areaFilter);
-      if (saved.roomsFilter) setRoomsFilter(saved.roomsFilter);
-      if (saved.conditionFilter) setConditionFilter(saved.conditionFilter);
-      if (saved.managerFilter) setManagerFilter(saved.managerFilter);
+      if (saved.actionFilter?.length) setActionFilter(saved.actionFilter);
+      if (saved.categoryFilter?.length) setCategoryFilter(saved.categoryFilter);
+      if (saved.subcategoryFilter?.length) setSubcategoryFilter(saved.subcategoryFilter);
+      if (saved.areaFilter?.length) setAreaFilter(saved.areaFilter);
+      if (saved.roomsFilter?.length) setRoomsFilter(saved.roomsFilter);
+      if (saved.conditionFilter?.length) setConditionFilter(saved.conditionFilter);
+      if (saved.managerFilter?.length) setManagerFilter(saved.managerFilter);
       if (saved.minPrice) setMinPrice(saved.minPrice);
       if (saved.maxPrice) setMaxPrice(saved.maxPrice);
       if (saved.currentPage) setCurrentPage(saved.currentPage);
@@ -114,6 +136,18 @@ export default function Dashboard() {
       clearDashboardState();
     }
   }, []);
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (currentPage > 1) {
+        next.set('page', String(currentPage));
+      } else {
+        next.delete('page');
+      }
+      return next;
+    }, { replace: true });
+  }, [currentPage, setSearchParams]);
 
   // Restore scroll position after data loads
   useEffect(() => {
@@ -128,7 +162,7 @@ export default function Dashboard() {
     }
   }, [loading]);
 
-  const navigateToProperty = useCallback((propertyId: string) => {
+  const saveDashboardNavigationState = useCallback(() => {
     // Save current state before navigating
     saveDashboardState({
       searchQuery,
@@ -146,8 +180,7 @@ export default function Dashboard() {
     });
     // Save scroll position separately (so restore-on-mount reads filters first)
     sessionStorage.setItem(DASHBOARD_STATE_KEY + '_scrollY', String(window.scrollY));
-    navigate(`/properties/${propertyId}`);
-  }, [navigate, searchQuery, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, managerFilter, minPrice, maxPrice, currentPage, showFilters]);
+  }, [searchQuery, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, managerFilter, minPrice, maxPrice, currentPage, showFilters]);
 
   useEffect(() => {
     fetchProperties();
@@ -296,6 +329,7 @@ export default function Dashboard() {
   };
 
   const toggleFeaturedProperty = async (propertyId: string, isFeatured: boolean, e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
 
     if (!isAdmin) {
@@ -408,12 +442,68 @@ export default function Dashboard() {
   });
 
   const totalPages = Math.ceil(filteredProperties.length / ITEMS_PER_PAGE);
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const paginatedProperties = filteredProperties.slice(startIndex, endIndex);
 
+  useEffect(() => {
+    if (!hoveredPropertyId) return;
+
+    const hoveredProperty = paginatedProperties.find((property) => property.id === hoveredPropertyId);
+    const photosCount = hoveredProperty?.property_photos?.length || 0;
+    if (photosCount < 2) return;
+    const currentIndex = photoIndexes[hoveredPropertyId] ?? 0;
+    const delayMs = currentIndex === 0 ? 2000 : 4000;
+
+    const timeoutId = window.setTimeout(() => {
+      setPhotoIndexes((prev) => ({
+        ...prev,
+        [hoveredPropertyId]: ((prev[hoveredPropertyId] ?? 0) + 1) % photosCount,
+      }));
+    }, delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [hoveredPropertyId, paginatedProperties, photoIndexes]);
+
+  const changePage = (nextPage: number) => {
+    const boundedPage = Math.max(1, Math.min(totalPages || 1, nextPage));
+    if (boundedPage === currentPage) return;
+
+    setCurrentPage(boundedPage);
+    requestAnimationFrame(() => {
+      propertiesGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   // Reset to first page when filters change
   useEffect(() => {
+    if (isRestoringFiltersRef.current) {
+      const currentFiltersSnapshot = JSON.stringify({
+        searchQuery,
+        actionFilter,
+        categoryFilter,
+        subcategoryFilter,
+        areaFilter,
+        roomsFilter,
+        conditionFilter,
+        managerFilter,
+        minPrice,
+        maxPrice,
+      });
+
+      if (restoredFiltersSnapshotRef.current === currentFiltersSnapshot) {
+        isRestoringFiltersRef.current = false;
+        restoredFiltersSnapshotRef.current = null;
+      }
+
+      return;
+    }
+
     setCurrentPage(1);
   }, [searchQuery, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, managerFilter, minPrice, maxPrice]);
 
@@ -659,9 +749,36 @@ export default function Dashboard() {
       </div>
 
       {/* Properties Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {paginatedProperties.map((property) => (
-          <Card key={property.id} className="overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer" onClick={() => navigateToProperty(property.id)}>
+      <div ref={propertiesGridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {paginatedProperties.map((property) => {
+          const sortedPhotos = (property.property_photos || []).slice().sort((a, b) => a.display_order - b.display_order);
+          const previewIndex = hoveredPropertyId === property.id ? (photoIndexes[property.id] ?? 0) : 0;
+          const previewPhotoUrl = sortedPhotos[previewIndex]?.photo_url || '/placeholder.svg';
+
+          return (
+          <Card
+            key={property.id}
+            className="overflow-hidden hover:shadow-xl transition-all duration-300 group"
+            onMouseEnter={() => {
+              if (sortedPhotos.length > 1) {
+                setHoveredPropertyId(property.id);
+              }
+            }}
+            onMouseLeave={() => {
+              setHoveredPropertyId((prev) => (prev === property.id ? null : prev));
+              setPhotoIndexes((prev) => ({ ...prev, [property.id]: 0 }));
+            }}
+          >
+            <Link
+              to={`/properties/${property.id}`}
+              className="block no-underline"
+              onClick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+                  return;
+                }
+                saveDashboardNavigationState();
+              }}
+            >
             <div className="aspect-video bg-muted relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
               <div className="absolute top-4 right-4 z-20 flex gap-2">
@@ -682,6 +799,7 @@ export default function Dashboard() {
                   variant="secondary"
                   className="rounded-full shadow-lg"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     toggleFavorite(property.id);
                   }}
@@ -696,17 +814,26 @@ export default function Dashboard() {
                   {getStatusText(property.status)}
                 </Badge>
               </div>
-              {property.property_photos && property.property_photos.length > 0 ? (
-                <img
-                  src={property.property_photos.sort((a, b) => a.display_order - b.display_order)[0].photo_url}
-                  alt={property.address}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                />
+              {sortedPhotos.length > 0 ? (
+                <div
+                  className="h-full w-full flex transition-transform duration-500 ease-out"
+                  style={{ transform: `translateX(-${previewIndex * 100}%)` }}
+                >
+                  {sortedPhotos.map((photo, photoIndex) => (
+                    <img
+                      key={`${property.id}-${photoIndex}-${photo.display_order}`}
+                      src={photo.photo_url}
+                      alt={property.address}
+                      className="w-full h-full min-w-full object-cover"
+                      loading={photoIndex === 0 ? 'eager' : 'lazy'}
+                    />
+                  ))}
+                </div>
               ) : (
                 <img
-                  src="/placeholder.svg"
+                  src={previewPhotoUrl}
                   alt={property.address}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  className="w-full h-full object-cover"
                 />
               )}
             </div>
@@ -771,6 +898,7 @@ export default function Dashboard() {
               <Button
                 className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   setSelectedProperty({ id: property.id, number: property.property_number });
                   setViewingDialogOpen(true);
@@ -779,8 +907,10 @@ export default function Dashboard() {
                 Назначить показ
               </Button>
             </CardContent>
+            </Link>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {filteredProperties.length === 0 && (
@@ -800,7 +930,7 @@ export default function Dashboard() {
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  onClick={() => changePage(currentPage - 1)}
                   className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                 />
               </PaginationItem>
@@ -814,7 +944,7 @@ export default function Dashboard() {
                   return (
                     <PaginationItem key={page}>
                       <PaginationLink
-                        onClick={() => setCurrentPage(page)}
+                        onClick={() => changePage(page)}
                         isActive={currentPage === page}
                       >
                         {page}
@@ -833,7 +963,7 @@ export default function Dashboard() {
 
               <PaginationItem>
                 <PaginationNext
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  onClick={() => changePage(currentPage + 1)}
                   className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
                 />
               </PaginationItem>

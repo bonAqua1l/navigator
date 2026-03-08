@@ -71,6 +71,28 @@ serve(async (req) => {
       )
     }
 
+    // Deletion from admin panel is allowed only for managers.
+    const { data: targetRoles, error: targetRolesError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+
+    if (targetRolesError) {
+      return new Response(
+        JSON.stringify({ error: 'Не удалось проверить роль пользователя' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const isManager = (targetRoles || []).some((targetRole) => targetRole.role === 'manager')
+
+    if (!isManager) {
+      return new Response(
+        JSON.stringify({ error: 'Удаление доступно только для менеджеров' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // First, update audit_logs to set user_id to NULL (preserve audit history)
     const { error: auditError } = await supabaseAdmin
       .from('audit_logs')

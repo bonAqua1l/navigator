@@ -70,6 +70,28 @@ Deno.serve(async (req) => {
             )
         }
 
+        // Password reset in admin panel is only for managers.
+        const { data: targetRoles, error: targetRolesError } = await supabaseAdmin
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId)
+
+        if (targetRolesError) {
+            return new Response(
+                JSON.stringify({ error: 'Не удалось проверить роль пользователя' }),
+                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+        }
+
+        const isManager = (targetRoles ?? []).some((targetRole) => targetRole.role === 'manager')
+
+        if (!isManager) {
+            return new Response(
+                JSON.stringify({ error: 'Смена пароля доступна только для менеджеров' }),
+                { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+        }
+
         // Update user password
         const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
             userId,

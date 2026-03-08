@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Building2, MapPin, Ruler, Home, Calendar, Phone, User, DollarSign, Star, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Building2, MapPin, Ruler, Home, Calendar, Phone, User, DollarSign, Star, Edit, Trash2, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/lib/priceUtils';
@@ -34,6 +34,28 @@ export default function PropertyDetails() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isCollaborator, setIsCollaborator] = useState(false);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const photos = property?.property_photos?.slice().sort((a: any, b: any) => a.display_order - b.display_order) || [];
+
+  const handleBack = () => {
+    const rawDashboardState = sessionStorage.getItem('dashboard_state');
+    let savedDashboardState: { currentPage?: number } | null = null;
+    try {
+      savedDashboardState = rawDashboardState ? JSON.parse(rawDashboardState) : null;
+    } catch {
+      savedDashboardState = null;
+    }
+    const savedPage = Number(savedDashboardState?.currentPage);
+    const fallbackUrl = savedPage > 1 ? `/dashboard?page=${savedPage}` : '/dashboard';
+
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(fallbackUrl);
+  };
 
   useEffect(() => {
     if (id) {
@@ -44,6 +66,36 @@ export default function PropertyDetails() {
       fetchCollaborators();
     }
   }, [id, user?.id]);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleFullscreenKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false);
+        setZoomLevel(1);
+        return;
+      }
+
+      if (event.key === 'ArrowRight' && photos.length > 1) {
+        setSelectedPhoto((prev) => (prev + 1) % photos.length);
+        setZoomLevel(1);
+      }
+
+      if (event.key === 'ArrowLeft' && photos.length > 1) {
+        setSelectedPhoto((prev) => (prev - 1 + photos.length) % photos.length);
+        setZoomLevel(1);
+      }
+    };
+
+    document.addEventListener('keydown', handleFullscreenKeys);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleFullscreenKeys);
+      document.body.style.overflow = '';
+    };
+  }, [isFullscreen, photos.length]);
 
   const fetchPropertyDetails = async () => {
     try {
@@ -256,14 +308,24 @@ export default function PropertyDetails() {
     );
   }
 
-  const photos = property.property_photos?.sort((a: any, b: any) => a.display_order - b.display_order) || [];
+  const zoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.25, 3));
+  const zoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.25, 1));
+  const openFullscreen = () => {
+    if (!photos.length) return;
+    setIsFullscreen(true);
+    setZoomLevel(1);
+  };
+  const closeFullscreen = () => {
+    setIsFullscreen(false);
+    setZoomLevel(1);
+  };
 
   return (
     <div className="p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" onClick={handleBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -363,6 +425,17 @@ export default function PropertyDetails() {
                 <div className="flex items-center justify-center h-full">
                   <Building2 className="h-24 w-24 text-muted-foreground" />
                 </div>
+              )}
+              {photos.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute bottom-4 right-4 z-20 bg-black/60 text-white hover:bg-black/80"
+                  onClick={openFullscreen}
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
               )}
             </div>
             {photos.length > 1 && (
@@ -706,6 +779,66 @@ export default function PropertyDetails() {
           </Card>
         </div>
       </div>
+
+      {isFullscreen && photos.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center">
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="bg-black/60 text-white hover:bg-black/80"
+              onClick={zoomOut}
+              disabled={zoomLevel <= 1}
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="bg-black/60 text-white hover:bg-black/80"
+              onClick={zoomIn}
+              disabled={zoomLevel >= 3}
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon"
+              className="bg-black/60 text-white hover:bg-black/80"
+              onClick={closeFullscreen}
+            >
+              <Minimize2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="absolute bottom-4 right-4 z-20 rounded-md bg-black/60 px-3 py-1 text-sm text-white">
+            {selectedPhoto + 1} / {photos.length}
+          </div>
+
+          <div
+            className="h-full w-full flex items-center justify-center overflow-hidden"
+            onWheel={(event) => {
+              event.preventDefault();
+              if (event.deltaY < 0) {
+                zoomIn();
+              } else {
+                zoomOut();
+              }
+            }}
+          >
+            <img
+              src={photos[selectedPhoto].photo_url}
+              alt={property.address}
+              className="max-h-full max-w-full object-contain select-none transition-transform duration-200"
+              style={{ transform: `scale(${zoomLevel})` }}
+              draggable={false}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
