@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface DeleteUserRequest {
   userId: string;
+  reassignedToUserId?: string;
 }
 
 serve(async (req) => {
@@ -54,7 +55,7 @@ serve(async (req) => {
       )
     }
 
-    const { userId }: DeleteUserRequest = await req.json()
+    const { userId, reassignedToUserId }: DeleteUserRequest = await req.json()
 
     if (!userId) {
       return new Response(
@@ -91,6 +92,84 @@ serve(async (req) => {
         JSON.stringify({ error: 'Удаление доступно только для менеджеров' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    const { count: createdPropertiesCount, error: propertiesCountError } = await supabaseAdmin
+      .from('properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', userId)
+
+    if (propertiesCountError) {
+      return new Response(
+        JSON.stringify({ error: 'Не удалось проверить объявления менеджера' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const propertiesCount = createdPropertiesCount || 0
+
+    if (propertiesCount > 0) {
+      if (!reassignedToUserId) {
+        return new Response(
+          JSON.stringify({ error: 'Перед удалением нужно переназначить объявления менеджера' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      if (reassignedToUserId === userId) {
+        return new Response(
+          JSON.stringify({ error: 'Нельзя переназначить объявления на удаляемого пользователя' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: reassignedProfile, error: reassignedProfileError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, is_active')
+        .eq('id', reassignedToUserId)
+        .single()
+
+      if (reassignedProfileError || !reassignedProfile || !reassignedProfile.is_active) {
+        return new Response(
+          JSON.stringify({ error: 'Пользователь для переназначения не найден или неактивен' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { data: reassignedRoles, error: reassignedRolesError } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', reassignedToUserId)
+
+      if (reassignedRolesError) {
+        return new Response(
+          JSON.stringify({ error: 'Не удалось проверить роль пользователя для переназначения' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const hasAllowedRole = (reassignedRoles || []).some(
+        (targetRole) => targetRole.role === 'manager' || targetRole.role === 'super_admin'
+      )
+
+      if (!hasAllowedRole) {
+        return new Response(
+          JSON.stringify({ error: 'Объявления можно переназначить только на менеджера или супер-админа' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const { error: reassignError } = await supabaseAdmin
+        .from('properties')
+        .update({ created_by: reassignedToUserId })
+        .eq('created_by', userId)
+
+      if (reassignError) {
+        return new Response(
+          JSON.stringify({ error: 'Не удалось переназначить объявления менеджера' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     }
 
     // First, update audit_logs to set user_id to NULL (preserve audit history)

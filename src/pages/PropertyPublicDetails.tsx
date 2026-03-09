@@ -21,16 +21,24 @@ interface PropertyDetails {
   property_size: number | null;
   property_lot_size: number | null;
   property_rooms: string | null;
+  property_floor_old: number | null;
+  property_floor_from_old: number | null;
   description: string | null;
   property_area_id: string | null;
   property_category_id: string | null;
   property_action_category_id: string | null;
   property_condition_id: string | null;
+  property_proposal_id: string | null;
   created_by: string;
   property_areas: { name: string; full_name: string | null } | null;
   property_categories: { name: string } | null;
   property_action_categories: { name: string } | null;
   property_conditions: { name: string } | null;
+  property_proposals: { name: string } | null;
+  property_furniture_types: { furniture_types: { name: string } | null }[];
+  property_communication_types: { communication_types: { name: string } | null }[];
+  property_payment_types: { payment_types: { name: string } | null }[];
+  property_document_types: { document_types: { name: string } | null }[];
   property_photos: { id: string; photo_url: string; display_order: number }[];
   profiles?: { full_name: string; phone: string | null; email: string; avatar_url: string | null } | null;
 }
@@ -68,16 +76,24 @@ const PropertyPublicDetails = () => {
           property_size,
           property_lot_size,
           property_rooms,
+          property_floor_old,
+          property_floor_from_old,
           description,
           property_area_id,
           property_category_id,
           property_action_category_id,
           property_condition_id,
+          property_proposal_id,
           created_by,
           property_areas (name, full_name),
           property_categories (name),
           property_action_categories (name),
           property_conditions (name),
+          property_proposals (name),
+          property_furniture_types (furniture_types(name)),
+          property_communication_types (communication_types(name)),
+          property_payment_types (payment_types(name)),
+          property_document_types (document_types(name)),
           property_photos (id, photo_url, display_order),
           profiles!properties_created_by_fkey (full_name, phone, email, avatar_url)
         `,
@@ -325,6 +341,25 @@ const PropertyPublicDetails = () => {
                           <p className="font-medium">{property.property_lot_size} соток</p>
                         </div>
                       )}
+                      <div>
+                        <p className="text-sm text-muted-foreground">Тип сделки</p>
+                        <p className="font-medium">{property.property_action_categories?.name || "—"}</p>
+                      </div>
+                      {property.property_proposals?.name && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Предложение</p>
+                          <p className="font-medium">{property.property_proposals.name}</p>
+                        </div>
+                      )}
+                      {property.property_floor_old && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Этаж</p>
+                          <p className="font-medium">
+                            {property.property_floor_old}
+                            {property.property_floor_from_old ? ` из ${property.property_floor_from_old}` : ""}
+                          </p>
+                        </div>
+                      )}
                       {property.property_conditions?.name && (
                         <div>
                           <p className="text-sm text-muted-foreground">Состояние</p>
@@ -335,7 +370,69 @@ const PropertyPublicDetails = () => {
                         <p className="text-sm text-muted-foreground">Район</p>
                         <p className="font-medium">{property.property_areas?.name || "—"}</p>
                       </div>
+                      {property.property_areas?.full_name && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Локация</p>
+                          <p className="font-medium">{property.property_areas.full_name}</p>
+                        </div>
+                      )}
                     </div>
+
+                    {!!property.property_furniture_types?.length && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Мебель</p>
+                        <div className="flex flex-wrap gap-2">
+                          {property.property_furniture_types
+                            .map((item) => item.furniture_types?.name)
+                            .filter(Boolean)
+                            .map((name) => (
+                              <Badge key={name} className="bg-green-500 text-white">{name}</Badge>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!!property.property_communication_types?.length && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Коммуникации</p>
+                        <div className="flex flex-wrap gap-2">
+                          {property.property_communication_types
+                            .map((item) => item.communication_types?.name)
+                            .filter(Boolean)
+                            .map((name) => (
+                              <Badge key={name} className="bg-green-500 text-white">{name}</Badge>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!!property.property_payment_types?.length && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Способы оплаты</p>
+                        <div className="flex flex-wrap gap-2">
+                          {property.property_payment_types
+                            .map((item) => item.payment_types?.name)
+                            .filter(Boolean)
+                            .map((name) => (
+                              <Badge key={name} className="bg-green-500 text-white">{name}</Badge>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {!!property.property_document_types?.length && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">Документы</p>
+                        <div className="flex flex-wrap gap-2">
+                          {property.property_document_types
+                            .map((item) => item.document_types?.name)
+                            .filter(Boolean)
+                            .map((name) => (
+                              <Badge key={name} className="bg-green-500 text-white">{name}</Badge>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>

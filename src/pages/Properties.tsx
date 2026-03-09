@@ -5,9 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Search, MapPin, Home, Filter } from "lucide-react";
+import { Search, Home, Filter } from "lucide-react";
 import { ROOM_OPTIONS } from "@/types/property";
 import { formatPrice } from "@/lib/priceUtils";
 import { MultiSelectCombobox } from "@/components/MultiSelectCombobox";
@@ -22,17 +20,26 @@ interface Property {
   currency: string;
   exchange_rate: number | null;
   property_size: number | null;
+  property_floor_old: number | null;
+  property_floor_from_old: number | null;
   property_rooms: string | null;
   property_area_id: string | null;
   property_category_id: string | null;
   property_subcategory_id: string | null;
   property_action_category_id: string | null;
   property_condition_id: string | null;
+  property_proposal_id: string | null;
   property_developer: string | null;
-  property_areas: { name: string } | null;
+  property_areas: { name: string; full_name: string | null } | null;
   property_categories: { name: string } | null;
   property_subcategories: { name: string } | null;
   property_action_categories: { name: string } | null;
+  property_conditions: { name: string } | null;
+  property_proposals: { name: string } | null;
+  property_furniture_types?: { furniture_type_id: string; furniture_types: { name: string } | null }[];
+  property_communication_types?: { communication_type_id: string; communication_types: { name: string } | null }[];
+  property_payment_types?: { payment_type_id: string; payment_types: { name: string } | null }[];
+  property_document_types?: { document_type_id: string; document_types: { name: string } | null }[];
   property_photos: { photo_url: string }[];
 }
 
@@ -43,13 +50,20 @@ const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [actionFilter, setActionFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [subcategoryFilter, setSubcategoryFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+  const [subcategoryFilter, setSubcategoryFilter] = useState<string[]>([]);
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
-  const [roomsFilter, setRoomsFilter] = useState<string>("all");
-  const [conditionFilter, setConditionFilter] = useState<string>("all");
-  const [developerFilter, setDeveloperFilter] = useState<string>("all");
+  const [roomsFilter, setRoomsFilter] = useState<string[]>([]);
+  const [conditionFilter, setConditionFilter] = useState<string[]>([]);
+  const [proposalFilter, setProposalFilter] = useState<string[]>([]);
+  const [developerFilter, setDeveloperFilter] = useState<string[]>([]);
+  const [furnitureFilter, setFurnitureFilter] = useState<string[]>([]);
+  const [communicationFilter, setCommunicationFilter] = useState<string[]>([]);
+  const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
+  const [documentFilter, setDocumentFilter] = useState<string[]>([]);
+  const [floorFromFilter, setFloorFromFilter] = useState<string>("");
+  const [floorToFilter, setFloorToFilter] = useState<string>("");
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
@@ -60,7 +74,12 @@ const Properties = () => {
   const [propertySubcategories, setPropertySubcategories] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [conditions, setConditions] = useState<any[]>([]);
+  const [proposals, setProposals] = useState<any[]>([]);
   const [developers, setDevelopers] = useState<any[]>([]);
+  const [furnitureTypes, setFurnitureTypes] = useState<any[]>([]);
+  const [communicationTypes, setCommunicationTypes] = useState<any[]>([]);
+  const [paymentTypes, setPaymentTypes] = useState<any[]>([]);
+  const [documentTypes, setDocumentTypes] = useState<any[]>([]);
 
   const { ref, inView } = useInView({
     threshold: 0,
@@ -73,13 +92,18 @@ const Properties = () => {
 
   const fetchFilters = async () => {
     try {
-      const [actionsRes, categoriesRes, subcategoriesRes, areasRes, conditionsRes, developersRes] = await Promise.all([
+      const [actionsRes, categoriesRes, subcategoriesRes, areasRes, conditionsRes, proposalsRes, developersRes, furnitureRes, communicationRes, paymentRes, documentRes] = await Promise.all([
         supabase.from("property_action_categories").select("*"),
         supabase.from("property_categories").select("*"),
         supabase.from("property_subcategories").select("*").order("name"),
         supabase.from("property_areas").select("*").order("name"),
         supabase.from("property_conditions").select("*").order("name"),
-        supabase.from("property_developers").select("*").order("name")
+        supabase.from("property_proposals").select("*").order("name"),
+        supabase.from("property_developers").select("*").order("name"),
+        supabase.from("furniture_types").select("*").order("name"),
+        supabase.from("communication_types").select("*").order("name"),
+        supabase.from("payment_types").select("*").order("name"),
+        supabase.from("document_types").select("*").order("name")
       ]);
 
       setActionCategories(actionsRes.data || []);
@@ -87,7 +111,12 @@ const Properties = () => {
       setPropertySubcategories(subcategoriesRes.data || []);
       setAreas(areasRes.data || []);
       setConditions(conditionsRes.data || []);
+      setProposals(proposalsRes.data || []);
       setDevelopers(developersRes.data || []);
+      setFurnitureTypes(furnitureRes.data || []);
+      setCommunicationTypes(communicationRes.data || []);
+      setPaymentTypes(paymentRes.data || []);
+      setDocumentTypes(documentRes.data || []);
     } catch (error) {
       console.error("Error fetching filters:", error);
     }
@@ -105,17 +134,26 @@ const Properties = () => {
           currency,
           exchange_rate,
           property_size,
+          property_floor_old,
+          property_floor_from_old,
           property_rooms,
           property_area_id,
           property_category_id,
           property_subcategory_id,
           property_action_category_id,
           property_condition_id,
+          property_proposal_id,
           property_developer,
-          property_areas (name),
+          property_areas (name, full_name),
           property_categories (name),
           property_subcategories (name),
           property_action_categories (name),
+          property_conditions (name),
+          property_proposals (name),
+          property_furniture_types (furniture_type_id, furniture_types(name)),
+          property_communication_types (communication_type_id, communication_types(name)),
+          property_payment_types (payment_type_id, payment_types(name)),
+          property_document_types (document_type_id, document_types(name)),
           property_photos (photo_url)
         `)
         .eq("status", "published")
@@ -164,32 +202,51 @@ const Properties = () => {
       property.property_areas?.name.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesAction =
-      actionFilter === "all" || property.property_action_category_id === actionFilter;
+      actionFilter.length === 0 || actionFilter.includes(property.property_action_category_id || '');
 
     const matchesCategory =
-      categoryFilter === "all" || property.property_category_id === categoryFilter;
+      categoryFilter.length === 0 || categoryFilter.includes(property.property_category_id || '');
 
     const matchesSubcategory =
-      subcategoryFilter === "all" || property.property_subcategory_id === subcategoryFilter;
+      subcategoryFilter.length === 0 || subcategoryFilter.includes(property.property_subcategory_id || '');
 
     const matchesArea =
       areaFilter.length === 0 || areaFilter.includes(property.property_area_id || '');
 
     const matchesRooms =
-      roomsFilter === "all" || property.property_rooms === roomsFilter;
+      roomsFilter.length === 0 || roomsFilter.includes(property.property_rooms || '');
 
     const matchesCondition =
-      conditionFilter === "all" || property.property_condition_id === conditionFilter;
+      conditionFilter.length === 0 || conditionFilter.includes(property.property_condition_id || '');
+
+    const matchesProposal =
+      proposalFilter.length === 0 || proposalFilter.includes(property.property_proposal_id || '');
 
     const matchesDeveloper =
-      developerFilter === "all" || property.property_developer === developerFilter;
+      developerFilter.length === 0 || developerFilter.includes(property.property_developer || '');
+
+    const propertyFurnitureIds = (property.property_furniture_types || []).map((item) => item.furniture_type_id);
+    const propertyCommunicationIds = (property.property_communication_types || []).map((item) => item.communication_type_id);
+    const propertyPaymentIds = (property.property_payment_types || []).map((item) => item.payment_type_id);
+    const propertyDocumentIds = (property.property_document_types || []).map((item) => item.document_type_id);
+
+    const matchesFurniture = furnitureFilter.length === 0 || furnitureFilter.some((id) => propertyFurnitureIds.includes(id));
+    const matchesCommunication = communicationFilter.length === 0 || communicationFilter.some((id) => propertyCommunicationIds.includes(id));
+    const matchesPayment = paymentFilter.length === 0 || paymentFilter.some((id) => propertyPaymentIds.includes(id));
+    const matchesDocument = documentFilter.length === 0 || documentFilter.some((id) => propertyDocumentIds.includes(id));
+
+    const floorFromNum = floorFromFilter ? parseInt(floorFromFilter, 10) : null;
+    const floorToNum = floorToFilter ? parseInt(floorToFilter, 10) : null;
+    const currentFloor = property.property_floor_old ?? null;
+    const matchesFloorFrom = floorFromNum === null || (currentFloor !== null && currentFloor >= floorFromNum);
+    const matchesFloorTo = floorToNum === null || (currentFloor !== null && currentFloor <= floorToNum);
 
     const minPriceNum = minPrice ? parseFloat(minPrice) : 0;
     const maxPriceNum = maxPrice ? parseFloat(maxPrice) : Infinity;
     const matchesPrice =
       property.price >= minPriceNum && property.price <= maxPriceNum;
 
-    return matchesSearch && matchesAction && matchesCategory && matchesSubcategory && matchesArea && matchesRooms && matchesCondition && matchesDeveloper && matchesPrice;
+    return matchesSearch && matchesAction && matchesCategory && matchesSubcategory && matchesArea && matchesRooms && matchesCondition && matchesProposal && matchesDeveloper && matchesFurniture && matchesCommunication && matchesPayment && matchesDocument && matchesFloorFrom && matchesFloorTo && matchesPrice;
   });
 
   const visibleProperties = filteredProperties.slice(0, displayedCount);
@@ -198,7 +255,7 @@ const Properties = () => {
   // Reset displayed count when filters change
   useEffect(() => {
     setDisplayedCount(ITEMS_PER_LOAD);
-  }, [searchTerm, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, developerFilter, minPrice, maxPrice]);
+  }, [searchTerm, actionFilter, categoryFilter, subcategoryFilter, areaFilter, roomsFilter, conditionFilter, proposalFilter, developerFilter, furnitureFilter, communicationFilter, paymentFilter, documentFilter, floorFromFilter, floorToFilter, minPrice, maxPrice]);
 
   // Load more when scrolling to bottom
   useEffect(() => {
@@ -280,73 +337,49 @@ const Properties = () => {
                 {/* Action Type */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Тип предложения</label>
-                  <Select value={actionFilter} onValueChange={setActionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {actionCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={actionCategories}
+                    selected={actionFilter}
+                    onChange={setActionFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск типа предложения..."
+                  />
                 </div>
 
                 {/* Property Category */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Тип недвижимости</label>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {propertyCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={propertyCategories}
+                    selected={categoryFilter}
+                    onChange={setCategoryFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск типа недвижимости..."
+                  />
                 </div>
 
                 {/* Property Subcategory (Дежурка) */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Подтип</label>
-                  <Select value={subcategoryFilter} onValueChange={setSubcategoryFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {propertySubcategories.map((subcat) => (
-                        <SelectItem key={subcat.id} value={subcat.id}>
-                          {subcat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={propertySubcategories}
+                    selected={subcategoryFilter}
+                    onChange={setSubcategoryFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск подтипа..."
+                  />
                 </div>
 
                 {/* Rooms */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Количество комнат</label>
-                  <Select value={roomsFilter} onValueChange={setRoomsFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {ROOM_OPTIONS.map((room) => (
-                        <SelectItem key={room.value} value={room.value}>
-                          {room.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={ROOM_OPTIONS.map((room) => ({ id: room.value, name: room.label }))}
+                    selected={roomsFilter}
+                    onChange={setRoomsFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск количества комнат..."
+                  />
                 </div>
 
                 {/* Area (Multi-Select) */}
@@ -364,37 +397,107 @@ const Properties = () => {
                 {/* Condition */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Состояние</label>
-                  <Select value={conditionFilter} onValueChange={setConditionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {conditions.map((condition) => (
-                        <SelectItem key={condition.id} value={condition.id}>
-                          {condition.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={conditions}
+                    selected={conditionFilter}
+                    onChange={setConditionFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск состояния..."
+                  />
+                </div>
+
+                {/* Proposal */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Предложение</label>
+                  <MultiSelectCombobox
+                    options={proposals}
+                    selected={proposalFilter}
+                    onChange={setProposalFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск предложения..."
+                  />
                 </div>
 
                 {/* Developer (ЖК) */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">ЖК</label>
-                  <Select value={developerFilter} onValueChange={setDeveloperFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Все" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      {developers.map((developer) => (
-                        <SelectItem key={developer.id} value={developer.name}>
-                          {developer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelectCombobox
+                    options={developers.map((developer: any) => ({ id: developer.name, name: developer.name }))}
+                    selected={developerFilter}
+                    onChange={setDeveloperFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск ЖК..."
+                  />
+                </div>
+
+                {/* Furniture */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Мебель</label>
+                  <MultiSelectCombobox
+                    options={furnitureTypes}
+                    selected={furnitureFilter}
+                    onChange={setFurnitureFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск мебели..."
+                  />
+                </div>
+
+                {/* Communications */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Коммуникации</label>
+                  <MultiSelectCombobox
+                    options={communicationTypes}
+                    selected={communicationFilter}
+                    onChange={setCommunicationFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск коммуникаций..."
+                  />
+                </div>
+
+                {/* Payment */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Способы оплаты</label>
+                  <MultiSelectCombobox
+                    options={paymentTypes}
+                    selected={paymentFilter}
+                    onChange={setPaymentFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск способа оплаты..."
+                  />
+                </div>
+
+                {/* Documents */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Документы</label>
+                  <MultiSelectCombobox
+                    options={documentTypes}
+                    selected={documentFilter}
+                    onChange={setDocumentFilter}
+                    placeholder="Все"
+                    searchPlaceholder="Поиск документов..."
+                  />
+                </div>
+
+                {/* Floor From */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Этаж от</label>
+                  <Input
+                    type="number"
+                    placeholder="Мин. этаж"
+                    value={floorFromFilter}
+                    onChange={(e) => setFloorFromFilter(e.target.value)}
+                  />
+                </div>
+
+                {/* Floor To */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Этаж до</label>
+                  <Input
+                    type="number"
+                    placeholder="Макс. этаж"
+                    value={floorToFilter}
+                    onChange={(e) => setFloorToFilter(e.target.value)}
+                  />
                 </div>
 
                 {/* Min Price */}
@@ -426,13 +529,20 @@ const Properties = () => {
                     size="sm"
                     onClick={() => {
                       setSearchTerm("");
-                      setActionFilter("all");
-                      setCategoryFilter("all");
-                      setSubcategoryFilter("all");
+                      setActionFilter([]);
+                      setCategoryFilter([]);
+                      setSubcategoryFilter([]);
                       setAreaFilter([]);
-                      setRoomsFilter("all");
-                      setConditionFilter("all");
-                      setDeveloperFilter("all");
+                      setRoomsFilter([]);
+                      setConditionFilter([]);
+                      setProposalFilter([]);
+                      setDeveloperFilter([]);
+                      setFurnitureFilter([]);
+                      setCommunicationFilter([]);
+                      setPaymentFilter([]);
+                      setDocumentFilter([]);
+                      setFloorFromFilter("");
+                      setFloorToFilter("");
                       setMinPrice("");
                       setMaxPrice("");
                     }}
@@ -515,6 +625,27 @@ const Properties = () => {
                         {property.property_rooms && (
                           <p className="text-sm text-muted-foreground">
                             Комнат: {property.property_rooms}
+                          </p>
+                        )}
+                        {property.property_floor_old && (
+                          <p className="text-sm text-muted-foreground">
+                            Этаж: {property.property_floor_old}
+                            {property.property_floor_from_old ? ` из ${property.property_floor_from_old}` : ""}
+                          </p>
+                        )}
+                        {property.property_conditions?.name && (
+                          <p className="text-sm text-muted-foreground">
+                            Состояние: {property.property_conditions.name}
+                          </p>
+                        )}
+                        {property.property_proposals?.name && (
+                          <p className="text-sm text-muted-foreground">
+                            Предложение: {property.property_proposals.name}
+                          </p>
+                        )}
+                        {property.property_areas?.full_name && (
+                          <p className="text-sm text-muted-foreground line-clamp-1">
+                            Локация: {property.property_areas.full_name}
                           </p>
                         )}
                         <div className="pt-2 border-t">

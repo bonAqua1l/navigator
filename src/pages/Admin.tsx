@@ -34,17 +34,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 
 interface UserWithRole {
   id: string;
@@ -78,6 +67,13 @@ export default function Admin() {
   const [changePasswordUserName, setChangePasswordUserName] = useState<string>('');
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTargetUserId, setDeleteTargetUserId] = useState('');
+  const [deleteTargetUserName, setDeleteTargetUserName] = useState('');
+  const [deleteTargetPropertiesCount, setDeleteTargetPropertiesCount] = useState(0);
+  const [deleteReassignToUserId, setDeleteReassignToUserId] = useState('');
+  const [preparingDelete, setPreparingDelete] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -195,7 +191,8 @@ export default function Admin() {
     }
   };
 
-  const deleteUser = async (userId: string) => {
+  const deleteUser = async (userId: string, reassignedToUserId?: string) => {
+    setDeletingUser(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(
@@ -206,7 +203,7 @@ export default function Admin() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`
           },
-          body: JSON.stringify({ userId })
+          body: JSON.stringify({ userId, reassignedToUserId })
         }
       );
 
@@ -221,6 +218,7 @@ export default function Admin() {
         description: 'Пользователь удален',
       });
       fetchUsers();
+      return true;
     } catch (error) {
       console.error('Error deleting user:', error);
       toast({
@@ -228,6 +226,9 @@ export default function Admin() {
         title: 'Ошибка',
         description: error instanceof Error ? error.message : 'Не удалось удалить пользователя',
       });
+      return false;
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -307,6 +308,59 @@ export default function Admin() {
     setChangePasswordDialogOpen(true);
   };
 
+  const openDeleteDialog = async (user: UserWithRole) => {
+    setDeleteTargetUserId(user.id);
+    setDeleteTargetUserName(user.full_name);
+    setDeleteTargetPropertiesCount(0);
+    setDeleteReassignToUserId('');
+    setDeleteDialogOpen(true);
+    setPreparingDelete(true);
+
+    try {
+      const { count, error } = await supabase
+        .from('properties')
+        .select('id', { count: 'exact', head: true })
+        .eq('created_by', user.id);
+
+      if (error) throw error;
+      setDeleteTargetPropertiesCount(count || 0);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка',
+        description: 'Не удалось проверить объявления менеджера перед удалением',
+      });
+    } finally {
+      setPreparingDelete(false);
+    }
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteTargetUserId) return;
+
+    if (deleteTargetPropertiesCount > 0 && !deleteReassignToUserId) {
+      toast({
+        variant: 'destructive',
+        title: 'Требуется действие',
+        description: 'Выберите пользователя для переназначения объявлений менеджера',
+      });
+      return;
+    }
+
+    const success = await deleteUser(
+      deleteTargetUserId,
+      deleteTargetPropertiesCount > 0 ? deleteReassignToUserId : undefined
+    );
+
+    if (success) {
+      setDeleteDialogOpen(false);
+      setDeleteTargetUserId('');
+      setDeleteTargetUserName('');
+      setDeleteTargetPropertiesCount(0);
+      setDeleteReassignToUserId('');
+    }
+  };
+
   const changePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       toast({
@@ -384,6 +438,11 @@ export default function Admin() {
   };
 
   const isManagerUser = (user: UserWithRole) => user.roles.some((role) => role.role === 'manager');
+  const deleteReassignmentCandidates = users.filter((user) =>
+    user.id !== deleteTargetUserId &&
+    user.is_active &&
+    user.roles.some((role) => role.role === 'manager' || role.role === 'super_admin')
+  );
 
   if (!isAdmin) {
     return (
@@ -661,36 +720,15 @@ export default function Admin() {
                                 <UserCheck className="h-4 w-4" />
                               )}
                             </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={!isManagerUser(user)}
-                                  title={isManagerUser(user) ? 'Удалить менеджера' : 'Удаление доступно только для менеджеров'}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Вы уверены, что хотите удалить {user.full_name}? Это действие нельзя отменить.
-                                    Все данные пользователя будут безвозвратно удалены.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => deleteUser(user.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Удалить
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!isManagerUser(user)}
+                              title={isManagerUser(user) ? 'Удалить менеджера' : 'Удаление доступно только для менеджеров'}
+                              onClick={() => openDeleteDialog(user)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -819,35 +857,15 @@ export default function Admin() {
                           )}
                           {user.is_active ? 'Деактивировать' : 'Активировать'}
                         </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs"
-                              disabled={!isManagerUser(user)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="max-w-[90vw] sm:max-w-[425px]">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle className="text-base">Удалить пользователя?</AlertDialogTitle>
-                              <AlertDialogDescription className="text-xs">
-                                Вы уверены, что хотите удалить {user.full_name}? Это действие нельзя отменить.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel className="text-xs">Отмена</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteUser(user.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 text-xs"
-                              >
-                                Удалить
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          disabled={!isManagerUser(user)}
+                          onClick={() => openDeleteDialog(user)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -861,6 +879,71 @@ export default function Admin() {
           <FeaturedPropertiesManager />
         </TabsContent>
       </Tabs>
+
+      {/* Change Password Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Удалить менеджера</DialogTitle>
+            <DialogDescription>
+              Перед удалением пользователя {deleteTargetUserName} нужно обработать его объявления.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {preparingDelete ? (
+              <p className="text-sm text-muted-foreground">Проверяем объявления менеджера...</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Найдено объявлений: <span className="font-medium text-foreground">{deleteTargetPropertiesCount}</span>
+                </p>
+                {deleteTargetPropertiesCount > 0 ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="reassignManager">Переназначить объявления на *</Label>
+                    <Select value={deleteReassignToUserId} onValueChange={setDeleteReassignToUserId}>
+                      <SelectTrigger id="reassignManager">
+                        <SelectValue placeholder="Выберите менеджера или супер-админа" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {deleteReassignmentCandidates.map((candidate) => (
+                          <SelectItem key={candidate.id} value={candidate.id}>
+                            {candidate.full_name} ({candidate.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {deleteReassignmentCandidates.length === 0 && (
+                      <p className="text-xs text-destructive">
+                        Нет доступных активных пользователей для переназначения. Добавьте менеджера или супер-админа.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    У менеджера нет объявлений. Можно удалить пользователя.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deletingUser || preparingDelete}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteUser}
+              disabled={
+                deletingUser ||
+                preparingDelete ||
+                (deleteTargetPropertiesCount > 0 && !deleteReassignToUserId)
+              }
+            >
+              {deletingUser ? 'Удаление...' : 'Удалить'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Change Password Dialog */}
       <Dialog open={changePasswordDialogOpen} onOpenChange={setChangePasswordDialogOpen}>
