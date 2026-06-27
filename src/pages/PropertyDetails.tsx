@@ -29,6 +29,8 @@ export default function PropertyDetails() {
   const { user, isAdmin } = useAuth();
   const [property, setProperty] = useState<any>(null);
   const [viewings, setViewings] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -61,11 +63,14 @@ export default function PropertyDetails() {
     if (id) {
       fetchPropertyDetails();
       fetchViewings();
+      if (isAdmin) {
+        fetchAuditLogs();
+      }
       checkFavorite();
       checkCollaborator();
       fetchCollaborators();
     }
-  }, [id, user?.id]);
+  }, [id, user?.id, isAdmin]);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -148,6 +153,37 @@ export default function PropertyDetails() {
       setViewings(data || []);
     } catch (error) {
       console.error('Error fetching viewings:', error);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    if (!id) return;
+
+    setAuditLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .eq('entity_id', id)
+        .in('entity_type', [
+          'properties',
+          'property_photos',
+          'property_payment_types',
+          'property_document_types',
+          'property_communication_types',
+          'property_furniture_types',
+          'viewings',
+        ])
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setAuditLogs(data || []);
+    } catch (error) {
+      console.error('Error fetching property audit logs:', error);
+    } finally {
+      setAuditLoading(false);
     }
   };
 
@@ -271,6 +307,124 @@ export default function PropertyDetails() {
       case 'cancelled': return 'Отменено';
       default: return status;
     }
+  };
+
+  const getAuditActionLabel = (action: string) => {
+    switch (action) {
+      case 'create':
+        return 'Создание';
+      case 'update':
+        return 'Обновление';
+      case 'delete':
+        return 'Удаление';
+      default:
+        return action;
+    }
+  };
+
+  const getAuditEntityLabel = (entityType: string) => {
+    switch (entityType) {
+      case 'properties':
+        return 'Объявление';
+      case 'property_photos':
+        return 'Фотографии';
+      case 'property_payment_types':
+        return 'Способы оплаты';
+      case 'property_document_types':
+        return 'Документы';
+      case 'property_communication_types':
+        return 'Коммуникации';
+      case 'property_furniture_types':
+        return 'Мебель';
+      case 'viewings':
+        return 'Показы';
+      default:
+        return entityType;
+    }
+  };
+
+  const getAuditFieldLabel = (field: string) => {
+    switch (field) {
+      case 'status':
+        return 'Статус';
+      case 'price':
+        return 'Цена';
+      case 'description':
+        return 'Описание';
+      case 'property_number':
+      case 'number':
+        return 'Номер';
+      case 'photo_url':
+        return 'Фото';
+      case 'display_order':
+        return 'Порядок фото';
+      case 'payment_type_id':
+        return 'Тип оплаты';
+      case 'document_type_id':
+        return 'Документ';
+      case 'communication_type_id':
+        return 'Коммуникация';
+      case 'furniture_type_id':
+        return 'Мебель';
+      default:
+        return field.replace(/_/g, ' ');
+    }
+  };
+
+  const getAuditValueLabel = (field: string, value: any) => {
+    if (value === null || value === undefined || value === '') return '—';
+
+    if (field === 'status') {
+      switch (value) {
+        case 'no_ads':
+          return 'Без рекламы';
+        case 'published':
+          return 'Опубликовано';
+        case 'deleted':
+          return 'Удалено';
+        case 'sold':
+          return 'Продано';
+        default:
+          return value;
+      }
+    }
+
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
+  };
+
+  const getAuditChangedFields = (log: any) => {
+    const oldValues = log.old_values && typeof log.old_values === 'object' ? log.old_values : {};
+    const newValues = log.new_values && typeof log.new_values === 'object' ? log.new_values : {};
+    const keys = new Set([...Object.keys(oldValues), ...Object.keys(newValues)]);
+
+    return Array.from(keys)
+      .filter(
+        (key) =>
+          !['id', 'created_at', 'updated_at', 'user_id', 'ip_address', 'user_agent', 'session_id'].includes(
+            key
+          )
+      )
+      .filter((key) => {
+        if (log.action_type === 'create') {
+          return newValues[key] !== undefined && newValues[key] !== null && newValues[key] !== '';
+        }
+
+        if (log.action_type === 'delete') {
+          return oldValues[key] !== undefined && oldValues[key] !== null && oldValues[key] !== '';
+        }
+
+        return JSON.stringify(oldValues[key]) !== JSON.stringify(newValues[key]);
+      })
+      .map((key) => ({
+        field: key,
+        label: getAuditFieldLabel(key),
+        oldValue: oldValues[key],
+        newValue: newValues[key],
+      }));
   };
 
   if (loading) {
@@ -460,13 +614,18 @@ export default function PropertyDetails() {
 
           {/* Tabs */}
           <Tabs defaultValue="description">
-            <TabsList className="w-full">
-              <TabsTrigger value="description" className="flex-1">Описание</TabsTrigger>
-              <TabsTrigger value="details" className="flex-1">Характеристики</TabsTrigger>
-              <TabsTrigger value="viewings" className="flex-1">
-                История показов ({viewings.length})
+          <TabsList className="w-full">
+            <TabsTrigger value="description" className="flex-1">Описание</TabsTrigger>
+            <TabsTrigger value="details" className="flex-1">Характеристики</TabsTrigger>
+            <TabsTrigger value="viewings" className="flex-1">
+              История показов ({viewings.length})
+            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="audit" className="flex-1">
+                История изменений ({auditLogs.length})
               </TabsTrigger>
-            </TabsList>
+            )}
+          </TabsList>
 
             <TabsContent value="description" className="space-y-4">
               <Card>
@@ -647,6 +806,108 @@ export default function PropertyDetails() {
                 </Card>
               )}
             </TabsContent>
+
+            {isAdmin && (
+              <TabsContent value="audit" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>История изменений объявления</CardTitle>
+                    <CardDescription>
+                      Изменения по текущему объявлению и связанным сущностям
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {auditLoading ? (
+                      <div className="py-8 text-center text-muted-foreground">
+                        Загрузка истории изменений...
+                      </div>
+                    ) : auditLogs.length > 0 ? (
+                      <div className="space-y-3">
+                        {auditLogs.map((log) => (
+                          <div key={log.id} className="rounded-lg border p-4 space-y-3">
+                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                              <div>
+                                <p className="font-semibold">
+                                  {getAuditEntityLabel(log.entity_type)} • {getAuditActionLabel(log.action_type)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(log.created_at).toLocaleString('ru-RU', {
+                                    day: 'numeric',
+                                    month: 'long',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="w-fit">
+                                {log.entity_type}
+                              </Badge>
+                            </div>
+
+                            {(() => {
+                              const changedFields = getAuditChangedFields(log);
+
+                              return changedFields.length > 0 ? (
+                                <div className="space-y-3">
+                                  {changedFields.map((fieldChange) => (
+                                    <div key={`${log.id}-${fieldChange.field}`} className="rounded-md bg-muted/40 p-3">
+                                      <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className="font-medium">{fieldChange.label}</p>
+                                        <Badge variant="outline">{fieldChange.field}</Badge>
+                                      </div>
+
+                                      {log.action_type === 'delete' ? (
+                                        <div className="text-sm">
+                                          <span className="text-muted-foreground">Было: </span>
+                                          <span className="font-medium">
+                                            {getAuditValueLabel(fieldChange.field, fieldChange.oldValue)}
+                                          </span>
+                                        </div>
+                                      ) : log.action_type === 'create' ? (
+                                        <div className="text-sm">
+                                          <span className="text-muted-foreground">Стало: </span>
+                                          <span className="font-medium">
+                                            {getAuditValueLabel(fieldChange.field, fieldChange.newValue)}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                          <div>
+                                            <p className="text-xs uppercase text-muted-foreground">Было</p>
+                                            <p className="text-sm font-medium break-words">
+                                              {getAuditValueLabel(fieldChange.field, fieldChange.oldValue)}
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs uppercase text-muted-foreground">Стало</p>
+                                            <p className="text-sm font-medium break-words">
+                                              {getAuditValueLabel(fieldChange.field, fieldChange.newValue)}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  В этом событии не найдено изменённых полей.
+                                </p>
+                              );
+                            })()}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-muted-foreground">
+                        История изменений отсутствует
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
 
